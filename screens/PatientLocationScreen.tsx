@@ -171,7 +171,6 @@ export default function PatientLocationScreen({ navigation }: Props) {
                 region={mapRegion}
                 showsUserLocation
                 showsMyLocationButton={false}
-                customMapStyle={mapStyleMuted} // subtle desaturation like the mock
             >
                 {/* Gradient pin with avatar + white halo */}
                 <Marker coordinate={patientInfo.coordinates} anchor={{ x: 0.5, y: 1 }}>
@@ -323,15 +322,6 @@ const ControlButton = ({ icon, onPress }: { icon: React.ReactNode; onPress: () =
     </TouchableOpacity>
   );
 };
-
-/* ————— Subtle muted map style (desaturated) ————— */
-const mapStyleMuted = [
-  { elementType: 'geometry', stylers: [{ color: '#ebe3cd' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#523735' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f1e6' }] },
-  { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#e6f0e9' }] },
-  { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#d6e4f5' }] },
-];
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
