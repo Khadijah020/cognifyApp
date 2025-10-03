@@ -1,25 +1,26 @@
 // PatientDetailsScreen.tsx
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import {
-  View,
-  Text,
+  Image,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
-  Platform,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
+import { usePatient } from '../contexts/PatientContext';
 
 import {
-  useFonts,
   Poppins_300Light,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientDetails'>;
@@ -70,25 +71,12 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     Poppins_700Bold,
   });
 
+  // Use patient data from context
+  const { patient } = usePatient();
+
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: COLORS.bgTo }} />;
   }
-
-  // (Optional) you can pass patient data via route.params
-  const patient = {
-    name: 'John Doe',
-    stage: 'Stage 4 Dementia',
-    dob: 'January 15, 1945',
-    address: '123 Memory Lane, Suite 2B',
-    emergency: 'Jane Doe (Daughter) - 555-1234',
-    allergies: 'Penicillin, Peanuts',
-    meds: 'Donepezil, Memantine',
-    conditions: 'Hypertension, Arthritis',
-    notes:
-      'John enjoys listening to classical music in the evenings. He sometimes gets anxious in new environments. Favorite snack is apple slices.',
-    likes:
-      'Likes: Gardening, Old Movies, Puzzles. Dislikes: Loud noises, Spicy food.',
-  };
 
   return (
     <View style={styles.root}>
@@ -124,11 +112,18 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={{ alignItems: 'center' }}>
             <View style={{ position: 'relative' }}>
               <View style={styles.avatar}>
-                <MaterialIcons
-                  name="person"
-                  size={64}
-                  color={COLORS.slate400}
-                />
+                {patient.avatar ? (
+                  <Image 
+                    source={{ uri: patient.avatar }} 
+                    style={styles.avatarImg}
+                  />
+                ) : (
+                  <MaterialIcons
+                    name="person"
+                    size={64}
+                    color={COLORS.slate400}
+                  />
+                )}
               </View>
               <View style={styles.statusDotWrap}>
                 <View style={styles.statusDot} />
@@ -255,7 +250,7 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => {
-              navigation.navigate('EditPatientDetails', { patient });
+              navigation.navigate('EditPatientDetails', { patient: {} as any });
             }}
           >
             <LinearGradient
@@ -343,6 +338,11 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 3,
+  },
+  avatarImg: {
+    width: R.avatarSize,
+    height: R.avatarSize,
+    borderRadius: R.avatarSize / 2,
   },
   statusDotWrap: {
     position: 'absolute',

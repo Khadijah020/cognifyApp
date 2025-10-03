@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
   Alert,
+  Platform,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
@@ -124,15 +125,16 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: COLORS.bg,
-    paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingHorizontal: Platform.OS === 'ios' ? 40 : 24,
+    paddingTop: Platform.OS === 'ios' ? 80 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 0,
   },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
-    marginTop: 30,
+    marginBottom: Platform.OS === 'ios' ? 60 : 20,
+    marginTop: Platform.OS === 'ios' ? 40 : 30,
   },
   brand: {
     fontFamily: "SpaceGrotesk_700Bold",
@@ -145,18 +147,18 @@ const styles = StyleSheet.create({
     fontFamily: "SpaceGrotesk_700Bold",
     fontSize: 28,
     textAlign: "center",
-    marginBottom: 6,
+    marginBottom: Platform.OS === 'ios' ? 16 : 6,
     color: COLORS.text,
   },
   sub: {
     fontFamily: "SpaceGrotesk_400Regular",
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: Platform.OS === 'ios' ? 50 : 20,
     color: COLORS.text,
   },
   fieldWrap: {
-    marginBottom: 12,
+    marginBottom: Platform.OS === 'ios' ? 20 : 12,
   },
   input: {
     backgroundColor: COLORS.inputBg,
@@ -171,7 +173,8 @@ const styles = StyleSheet.create({
     fontFamily: "SpaceGrotesk_400Regular",
     color: COLORS.subText,
     textDecorationLine: "underline",
-    marginBottom: 20,
+    marginBottom: Platform.OS === 'ios' ? 40 : 20,
+    marginTop: Platform.OS === 'ios' ? 8 : 0,
     fontSize: 14,
   },
   primaryBtn: {
@@ -180,7 +183,8 @@ const styles = StyleSheet.create({
     height: 52,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: Platform.OS === 'ios' ? 40 : 20,
+    marginHorizontal: Platform.OS === 'ios' ? 20 : 0,
   },
   primaryBtnText: {
     fontFamily: "SpaceGrotesk_700Bold",
@@ -189,7 +193,7 @@ const styles = StyleSheet.create({
   },
   bottomLinkWrap: {
     marginTop: "auto",
-    marginBottom: 30,
+    marginBottom: Platform.OS === 'ios' ? 20 : 30,
   },
   bottomLink: {
     fontFamily: "SpaceGrotesk_400Regular",
@@ -197,6 +201,6 @@ const styles = StyleSheet.create({
     color: COLORS.subText,
     textDecorationLine: "underline",
     fontSize: 14,
-    marginBottom: 30,
+    marginBottom: Platform.OS === 'ios' ? 20 : 30,
   },
 });

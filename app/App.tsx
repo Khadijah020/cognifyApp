@@ -1,23 +1,24 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ActivityIndicator, View } from "react-native";
 
-import LoginScreen from "../screens/LoginScreen";
-import SignupScreen from "../screens/SignupScreen";
-import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
-import AddReminderScreen from "../screens/AddReminderScreen"; 
-import PatientDetailsScreen from "../screens/PatientDetailsScreen";
-import EditPatientDetailsScreen from "../screens/EditPatientDetailsScreen";
-import PatientLocationScreen from "../screens/PatientLocationScreen";
-import SettingsScreen from "@/screens/SettingsScreen";
-import ManageFacesScreen from "@/screens/ManageFacesScreen";
+import AddPatientScreen from "@/screens/AddPatientScreen";
 import ChangeEmailScreen from "@/screens/ChangeEmailScreen";
 import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import EditCaregiverProfileScreen from "@/screens/EditCaregiverProfileScreen";
-import AddPatientScreen from "@/screens/AddPatientScreen";
+import ManageFacesScreen from "@/screens/ManageFacesScreen";
 import PatientDashboardScreen from "@/screens/PatientDashboardScreen";
+import SettingsScreen from "@/screens/SettingsScreen";
+import { PatientProvider } from "../contexts/PatientContext";
+import AddReminderScreen from "../screens/AddReminderScreen";
+import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
+import EditPatientDetailsScreen from "../screens/EditPatientDetailsScreen";
+import LoginScreen from "../screens/LoginScreen";
+import PatientDetailsScreen from "../screens/PatientDetailsScreen";
+import PatientLocationScreen from "../screens/PatientLocationScreen";
+import SignupScreen from "../screens/SignupScreen";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -78,27 +79,29 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Signup" component={SignupScreen} />
-        <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
-        <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
-        <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
-        <Stack.Screen name="AddReminder" component={AddReminderScreen} />
-        <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
-        <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-        <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
-        <Stack.Screen name="AddPatient" component={AddPatientScreen} />
-        <Stack.Screen
-          name="EditPatientDetails"
-          component={EditPatientDetailsScreen}
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <PatientProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Signup" component={SignupScreen} />
+          <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
+          <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
+          <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
+          <Stack.Screen name="AddReminder" component={AddReminderScreen} />
+          <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
+          <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+          <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
+          <Stack.Screen name="AddPatient" component={AddPatientScreen} />
+          <Stack.Screen
+            name="EditPatientDetails"
+            component={EditPatientDetailsScreen}
+            options={{ headerShown: false }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </PatientProvider>
   );
 }

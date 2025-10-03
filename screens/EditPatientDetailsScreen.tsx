@@ -1,30 +1,30 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Platform,
-  Image,
-  Alert,
-  KeyboardAvoidingView,
-} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useMemo, useState } from 'react';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { RootStackParamList } from '../app/App';
 import { usePatient } from '../contexts/PatientContext';
 
 import {
-  useFonts,
   Poppins_300Light,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditPatientDetails'>;
@@ -64,7 +64,7 @@ const Field: React.FC<{
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={styles.inputLabel}>{label}</Text>
-      <View style={[styles.inputWrap, { borderColor: b }, focus && styles.inputFocusShadow]}>
+      <View style={[styles.inputWrap, { borderColor: b }]}>
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -73,6 +73,9 @@ const Field: React.FC<{
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}
           placeholderTextColor={C.slate500}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          autoCorrect={false}
+          autoCapitalize="words"
         />
       </View>
     </View>
@@ -89,7 +92,19 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   });
   const { patient, updatePatient } = usePatient();
 
-  const [form, setForm] = useState(() => ({ ...patient }));
+  const [form, setForm] = useState(() => ({
+    name: patient?.name || '',
+    stage: patient?.stage || '',
+    dob: patient?.dob || '',
+    address: patient?.address || '',
+    emergency: patient?.emergency || '',
+    allergies: patient?.allergies || '',
+    meds: patient?.meds || '',
+    conditions: patient?.conditions || '',
+    notes: patient?.notes || '',
+    likes: patient?.likes || '',
+    avatar: patient?.avatar,
+  }));
   const [avatar, setAvatar] = useState<string | undefined>(patient?.avatar);
 
   const set = (key: keyof typeof form) => (t: string) =>
@@ -129,11 +144,16 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
         {spacer}
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
         <ScrollView
           contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 28 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bounces={true}
         >
           {/* Avatar + name card */}
           <View style={[styles.card, { marginTop: 8 }]}>
@@ -284,23 +304,18 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     backgroundColor: C.inputBg,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: C.inputBorder,
     borderRadius: 12,
+    overflow: 'hidden',
   },
   input: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === 'ios' ? 16 : 12,
     color: C.slate700,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Poppins_500Medium',
-  },
-  inputFocusShadow: {
-    shadowColor: C.indigo500,
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
+    minHeight: 50,
   },
 
   footerRow: {
