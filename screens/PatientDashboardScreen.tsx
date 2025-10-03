@@ -1,5 +1,5 @@
 // PatientDashboardScreen.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import HealthDataService from '../services/HealthDataService';
 
 
 import {
@@ -62,6 +63,28 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
+
+  const [steps, setSteps] = useState(0);
+  const [activeMinutes, setActiveMinutes] = useState(0);
+
+  useEffect(() => {
+    loadHealthData();
+    // Refresh health data every 30 seconds
+    const interval = setInterval(loadHealthData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadHealthData = async () => {
+    try {
+      const stepCount = await HealthDataService.getStepCount();
+      const minutes = await HealthDataService.getActiveMinutes();
+      setSteps(stepCount);
+      setActiveMinutes(minutes);
+    } catch (error) {
+      console.log('Error loading health data:', error);
+    }
+  };
+
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
   const callCaregiver = async () => {
@@ -157,14 +180,14 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           <View style={[styles.card, styles.activityGrid]}>
             <View style={[styles.activityItem, { backgroundColor: '#eef2ff' }]}>
               <MaterialIcons name="directions-walk" size={36} color={C.indigo500} />
-              <Text style={styles.activityBig}>4,280</Text>
+              <Text style={styles.activityBig}>{steps.toLocaleString()}</Text>
               <Text style={styles.activitySub}>Steps</Text>
             </View>
 
             <View style={[styles.activityItem, { backgroundColor: '#f0fdfa' }]}>
-              <MaterialIcons name="medication" size={36} color={C.teal500} />
-              <Text style={styles.activityBig}>2/3</Text>
-              <Text style={styles.activitySub}>Meds Taken</Text>
+              <MaterialIcons name="local-fire-department" size={36} color={C.teal500} />
+              <Text style={styles.activityBig}>{activeMinutes}</Text>
+              <Text style={styles.activitySub}>Active Mins</Text>
             </View>
           </View>
         </View>

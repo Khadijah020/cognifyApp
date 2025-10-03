@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -35,6 +35,7 @@ import Svg, {
 } from "react-native-svg";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../app/App";
+import HealthDataService from "../services/HealthDataService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -75,6 +76,28 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   /* -------------------- Modal state -------------------- */
   const [showReminder, setShowReminder] = useState(false);
   const [activeReminder, setActiveReminder] = useState<ReminderData | null>(null);
+
+  /* -------------------- Health data state -------------------- */
+  const [steps, setSteps] = useState(4280);
+  const [activeMinutes, setActiveMinutes] = useState(62);
+
+  useEffect(() => {
+    loadHealthData();
+    // Refresh health data every 30 seconds
+    const interval = setInterval(loadHealthData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadHealthData = async () => {
+    try {
+      const stepCount = await HealthDataService.getStepCount();
+      const minutes = await HealthDataService.getActiveMinutes();
+      setSteps(stepCount);
+      setActiveMinutes(minutes);
+    } catch (error) {
+      console.log('Error loading health data:', error);
+    }
+  };
 
   // ---------- bottom sheet animation + drag-to-close
   const translateY = useRef(new Animated.Value(0)).current;
@@ -226,11 +249,11 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 <MaterialIcons name="directions-walk" size={30} color="#6366F1" />
               </View>
               <View style={{ flexDirection: "row", marginTop: 8 }}>
-                <Text style={styles.steps}>4,280</Text>
+                <Text style={styles.steps}>{steps.toLocaleString()}</Text>
                 <Text style={styles.stepLabel}>steps</Text>
               </View>
               <View style={{ flexDirection: "row", marginTop: -4 }}>
-                <Text style={styles.minutes}>62</Text>
+                <Text style={styles.minutes}>{activeMinutes}</Text>
                 <Text style={styles.minLabel}>active mins</Text>
               </View>
             </CardBox>
