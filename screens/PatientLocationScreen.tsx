@@ -1,0 +1,505 @@
+// PatientLocationScreen.tsx
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Dimensions,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import * as Location from 'expo-location';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../app/App';
+
+import {
+  useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'PatientLocation'>;
+
+interface PatientInfo {
+  name: string;
+  lastUpdated: string;
+  address: string;
+  coordinates: { latitude: number; longitude: number };
+}
+
+const C = {
+  bg: '#f0f4ff',
+  slate800: '#1e293b',
+  slate700: '#334155',
+  slate600: '#475569',
+  slate500: '#64748b',
+  slate400: '#94a3b8',
+  white: '#ffffff',
+  indigo100: '#e0e7ff',
+  indigo300: '#a5b4fc',
+  indigo500: '#6366f1',
+  purple300: '#c084fc',
+  btnFrom: '#818cf8',
+  btnTo: '#6366f1',
+};
+
+export default function PatientLocationScreen({ navigation }: Props) {
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
+  const [patientInfo, setPatientInfo] = useState<PatientInfo>({
+    name: 'John Doe',
+    lastUpdated: 'updating...',
+    address: 'Loading address...',
+    coordinates: { latitude: 0, longitude: 0 },
+  });
+  const [locationPermission, setLocationPermission] = useState<boolean>(false);
+  const [mapRegion, setMapRegion] = useState<Region | null>(null);
+  const mapRef = useRef<MapView>(null);
+
+  const screenH = Dimensions.get('window').height;
+  const mapHeight = useMemo(() => Math.max(350, screenH - 380), [screenH]);
+
+  useEffect(() => {
+    let sub: Location.LocationSubscription | undefined;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to display the patient location.');
+        return;
+      }
+
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        const [addr] = await Location.reverseGeocodeAsync({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+
+        const formattedAddress = addr
+          ? `${addr.street || 'Near'} ${addr.name || ''}, ${addr.city || ''}, ${addr.region || ''}`.replace(/\s+/g,' ').trim()
+          : 'Unknown location';
+
+        setPatientInfo({
+          name: 'John Doe',
+          lastUpdated: 'just now',
+          address: formattedAddress,
+          coordinates: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
+        });
+
+        const region = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+        setMapRegion(region);
+      } catch (e) {
+        console.error('Location error', e);
+        Alert.alert('Error', 'Failed to get current location.');
+      }
+
+      // continuous updates
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+        (loc) => {
+          setPatientInfo((prev) => ({
+            ...prev,
+            lastUpdated: '2 mins ago', // simple label to match mock
+            coordinates: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
+          }));
+        }
+      );
+    })();
+
+    return () => sub?.remove();
+  }, []);
+
+  const openExternalDirections = () => {
+    const { latitude, longitude } = patientInfo.coordinates;
+    if (!latitude && !longitude) {
+      Alert.alert('Error', 'Cannot get directions without a valid location.');
+      return;
+    }
+    const label = encodeURIComponent(patientInfo.name);
+    const apple = `http://maps.apple.com/?daddr=${latitude},${longitude}&q=${label}`;
+    const google = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=walking`;
+    const url = Platform.select({ ios: apple, android: google, default: google })!;
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'Failed to open maps.'));
+  };
+
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+
+  return (
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back-ios-new" size={24} color={C.slate600} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Patient Location</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Map container */}
+        <View style={[styles.mapOuter, { height: mapHeight }]}>
+            {mapRegion ? (
+            <MapView
+                ref={mapRef}
+                provider={PROVIDER_GOOGLE}
+                style={StyleSheet.absoluteFill}
+                initialRegion={mapRegion}
+                region={mapRegion}
+                showsUserLocation
+                showsMyLocationButton={false}
+                customMapStyle={mapStyleMuted} // subtle desaturation like the mock
+            >
+                {/* Gradient pin with avatar + white halo */}
+                <Marker coordinate={patientInfo.coordinates} anchor={{ x: 0.5, y: 1 }}>
+                <View style={styles.pinWrap}>
+                    <View style={styles.pinHalo} />
+                    <LinearGradient
+                    colors={[C.purple300, C.indigo300]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.pin}
+                    >
+                    <View style={styles.pinAvatar}>
+                        {/* If you have an avatar URI, drop an <Image> here */}
+                        <Text style={styles.pinInitial}>John</Text>
+                    </View>
+                    </LinearGradient>
+                </View>
+                </Marker>
+            </MapView>
+            ) : (
+            <View style={[StyleSheet.absoluteFill, styles.loadingMap]}>
+                <Text style={{ fontFamily: 'Poppins_500Medium', color: C.slate600 }}>Loading map…</Text>
+            </View>
+            )}
+
+            {/* Map control stack (locate / zoom in / out) */}
+            <View style={styles.controlsWrap}>
+            <ControlButton
+                icon={<MaterialIcons name="my-location" size={18} color={C.slate700} />}
+                onPress={async () => {
+                if (!locationPermission) {
+                    Alert.alert('Permission Denied', 'Location permission is required.');
+                    return;
+                }
+                try {
+                    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                    const region = {
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                    };
+                    setMapRegion(region);
+                    mapRef.current?.animateToRegion(region, 300);
+                } catch {
+                    Alert.alert('Error', 'Failed to get your current location.');
+                }
+                }}
+            />
+            <ControlButton
+                icon={<MaterialIcons name="add" size={18} color={C.slate700} />}
+                onPress={() => {
+                if (!mapRegion) return;
+                const r = {
+                    ...mapRegion,
+                    latitudeDelta: mapRegion.latitudeDelta / 2,
+                    longitudeDelta: mapRegion.longitudeDelta / 2,
+                };
+                setMapRegion(r);
+                mapRef.current?.animateToRegion(r, 200);
+                }}
+            />
+            <ControlButton
+                icon={<MaterialIcons name="remove" size={18} color={C.slate700} />}
+                onPress={() => {
+                if (!mapRegion) return;
+                const r = {
+                    ...mapRegion,
+                    latitudeDelta: mapRegion.latitudeDelta * 2,
+                    longitudeDelta: mapRegion.longitudeDelta * 2,
+                };
+                setMapRegion(r);
+                mapRef.current?.animateToRegion(r, 200);
+                }}
+            />
+            </View>
+        </View>
+
+        {/* Details card */}
+        <View style={styles.card}>
+            <View style={styles.cardHeader}>
+            <View style={styles.avatarRing}>
+                <Text style={styles.avatarInitial}>John</Text>
+            </View>
+            <View style={{ marginLeft: 14 }}>
+                <Text style={styles.name}>John Doe</Text>
+                <Text style={styles.updated}>Last updated: {patientInfo.lastUpdated}</Text>
+            </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={{ gap: 14 }}>
+            <View style={styles.row}>
+                <View style={[styles.iconBg, { backgroundColor: C.indigo100 }]}>
+                <MaterialIcons name="pin-drop" size={20} color={C.indigo500} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={styles.label}>Address</Text>
+                <Text style={styles.value}>{patientInfo.address}</Text>
+                </View>
+            </View>
+
+            <View style={styles.row}>
+                <View style={[styles.iconBg, { backgroundColor: '#f3e8ff' /* purple-100 */ }]}>
+                <MaterialIcons name="explore" size={20} color="#8b5cf6" />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={styles.label}>Coordinates</Text>
+                <Text style={styles.value}>
+                    {patientInfo.coordinates.latitude
+                    ? `${Math.abs(patientInfo.coordinates.latitude).toFixed(4)}° ${
+                        patientInfo.coordinates.latitude >= 0 ? 'N' : 'S'
+                        }, ${Math.abs(patientInfo.coordinates.longitude).toFixed(4)}° ${
+                        patientInfo.coordinates.longitude >= 0 ? 'E' : 'W'
+                        }`
+                    : 'Locating…'}
+                </Text>
+                </View>
+            </View>
+            </View>
+
+        </View>
+
+        {/* CTA */}
+        <View style={{ paddingHorizontal: 24, paddingBottom: 18, marginTop: 8 }}>
+            <TouchableOpacity activeOpacity={0.9} onPress={openExternalDirections}>
+            <LinearGradient
+                colors={[C.btnFrom, C.btnTo]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cta}
+            >
+                <Ionicons name="navigate" size={22} color="#fff" />
+                <Text style={styles.ctaText}>Get Directions</Text>
+            </LinearGradient>
+            </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/* ————— Reusable small control button ————— */
+const ControlButton = ({ icon, onPress }: { icon: React.ReactNode; onPress: () => void }) => {
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.ctrlBtn}>
+      {icon}
+    </TouchableOpacity>
+  );
+};
+
+/* ————— Subtle muted map style (desaturated) ————— */
+const mapStyleMuted = [
+  { elementType: 'geometry', stylers: [{ color: '#ebe3cd' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#523735' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f1e6' }] },
+  { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#e6f0e9' }] },
+  { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#d6e4f5' }] },
+];
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.bg },
+
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backBtn: { paddingRight: 12, paddingVertical: 4 },
+  headerTitle: {
+    marginLeft: 30,
+    fontSize: 22,
+    color: C.slate800,
+    fontFamily: 'Poppins_700Bold',
+  },
+
+  mapOuter: {
+    marginTop: 8,
+    marginHorizontal: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#dfe7ff',
+    shadowColor: '#4f46e5',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  loadingMap: { alignItems: 'center', justifyContent: 'center' },
+
+  controlsWrap: {
+    position: 'absolute',
+    right: 14,
+    top: 14,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 999,
+    padding: 8,
+    gap: 8,
+    alignItems: 'center',
+  },
+  ctrlBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+
+  /* Marker */
+  pinWrap: { alignItems: 'center' },
+  pinHalo: {
+    position: 'absolute',
+    bottom: 10,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  pin: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ translateY: -16 }],
+  },
+  pinAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinInitial: {
+    fontSize: 14,
+    color: C.slate700,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  /* Card */
+  card: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    marginTop: 18,
+    marginBottom: 10,
+    marginHorizontal: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  avatarRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: 16,
+    color: C.slate700,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  name: {
+    fontSize: 20,
+    color: C.slate800,
+    fontFamily: 'Poppins_700Bold',
+  },
+  updated: {
+    marginTop: 2,
+    fontSize: 12,
+    color: C.slate500,
+    fontFamily: 'Poppins_400Regular',
+  },
+  divider: { height: 1, backgroundColor: '#eef2f7', marginVertical: 12 },
+  row: { flexDirection: 'row', alignItems: 'flex-start' },
+  iconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 12,
+    color: C.slate500,
+    fontFamily: 'Poppins_400Regular',
+  },
+  value: {
+    marginTop: 2,
+    fontSize: 16,
+    color: C.slate700,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  /* CTA */
+  cta: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    shadowColor: '#9aa2ff',
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  ctaText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#fff',
+    fontFamily: 'Poppins_700Bold',
+  },
+});
