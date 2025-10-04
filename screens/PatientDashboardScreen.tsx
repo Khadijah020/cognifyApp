@@ -142,7 +142,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         {/* Quick Actions */}
         <SectionTitle>Quick Actions</SectionTitle>
         <View style={styles.quickGrid}>
-          <TouchableOpacity activeOpacity={0.9} style={[styles.card, styles.quickItem]}>
+          <TouchableOpacity activeOpacity={0.9} style={[styles.card, styles.quickItem]} onPress={() => navigation.navigate('VoiceAssistant')}>
             <MaterialIcons name="mic" size={30} color={C.indigo500} />
             <Text style={styles.quickText}>Ask for Help</Text>
           </TouchableOpacity>

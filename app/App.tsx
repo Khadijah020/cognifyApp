@@ -19,6 +19,7 @@ import LoginScreen from "../screens/LoginScreen";
 import PatientDetailsScreen from "../screens/PatientDetailsScreen";
 import PatientLocationScreen from "../screens/PatientLocationScreen";
 import SignupScreen from "../screens/SignupScreen";
+import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   EditCaregiverProfile: undefined;
   AddPatient: undefined;
   PatientDashboard: undefined; 
+  VoiceAssistant: undefined;
   AddReminder: {
     prefill?: {
       title?: string;
@@ -95,6 +97,7 @@ export default function App() {
           <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
           <Stack.Screen name="AddPatient" component={AddPatientScreen} />
+          <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
           <Stack.Screen
             name="EditPatientDetails"
             component={EditPatientDetailsScreen}
