@@ -11,32 +11,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name:  Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name:  Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
 
-      - name:  Install dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name:  Run ESLint
+      - name: Run ESLint
         run: npm run lint
 
-
       # Ensure it can prebuild for native (Android/iOS)
-      - name:  Prebuild native project (validate mobile build)
+      - name: Prebuild native project (validate mobile build)
         run: npx expo prebuild --non-interactive
 
-      #  Merge latest main into current branch (simulation)
+      #  Set up Git user identity to avoid commit errors
+      - name: Set up Git user identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Merge latest main into current branch (simulation)
       - name: Merge latest main into branch (simulate)
         run: |
           git fetch origin main
           git merge origin/main --allow-unrelated-histories --no-edit
 
-      #  Test final mobile build (without running emulator)
-      - name:  Validate merged build
+      # Test final mobile build (without running emulator)
+      - name: Validate merged build
         run: npx expo prebuild --non-interactive
