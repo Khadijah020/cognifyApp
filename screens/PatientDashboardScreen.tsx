@@ -66,6 +66,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
   const [steps, setSteps] = useState(0);
   const [activeMinutes, setActiveMinutes] = useState(0);
+  const [showReminder, setShowReminder] = useState(false);
 
   useEffect(() => {
     loadHealthData();
@@ -73,6 +74,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     const interval = setInterval(loadHealthData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+  const t = setTimeout(() => setShowReminder(true), 900);
+  return () => clearTimeout(t);
+}, []);
 
   const loadHealthData = async () => {
     try {
@@ -222,6 +228,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         </TouchableOpacity>
         </View>
 
+        <ReminderPopup visible={showReminder} onClose={() => setShowReminder(false)} />
+
       </ScrollView>
     </View>
   );
@@ -257,6 +265,40 @@ const handleSignOut = async (navigation: Props['navigation']) => {
   } catch {}
   navigation.replace('Login');
 };
+
+const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
+  if (!visible) return null;
+
+  return (
+    <View style={styles.reminderScrim}>
+      <View style={styles.reminderWrap}>
+        <LinearGradient
+          colors={['#818cf8', '#a78bfa']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.reminderCard}
+        >
+          <View style={styles.reminderIconCircle}>
+            <MaterialIcons name="lightbulb" size={48} color="#fff" />
+          </View>
+
+          <Text style={styles.reminderTitle}>Gentle Reminder</Text>
+
+          <Text style={styles.reminderBody}>
+            It looks like you've left the front door open. It's a good idea to close it to stay safe.
+          </Text>
+
+          <TouchableOpacity style={styles.reminderCta} activeOpacity={0.9} onPress={onClose}>
+            <Text style={styles.reminderCtaText}>Okay, I'll close it</Text>
+          </TouchableOpacity>
+        </LinearGradient>
+      </View>
+    </View>
+  );
+};
+
+
+
 
 
 /* ---------- Styles ---------- */
@@ -472,5 +514,66 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#df6666ff',
     },
+
+    // --- Reminder Popup ---
+  reminderScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  reminderWrap: { width: '100%', maxWidth: 380 },
+  reminderCard: {
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#818cf8',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  reminderIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  reminderTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 24,
+    color: '#fff',
+    marginTop: 4,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  reminderBody: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 18,
+    lineHeight: 28,
+    color: '#ffffff',
+    opacity: 0.95,
+    textAlign: 'center',
+    marginBottom: 18,
+    paddingHorizontal: 6,
+  },
+  reminderCta: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderCtaText: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 18,
+    color: '#4f46e5', // indigo-600
+  },
+
 
 });
