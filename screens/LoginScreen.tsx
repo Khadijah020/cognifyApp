@@ -51,10 +51,10 @@ export default function LoginScreen({ navigation }: Props) {
   }
 
   // Example: hard-coded role check — replace with API/database later
-  if (email === "patient@example.com" && password === "patient123") {
+  if (email === "p" && password === "p") {
     await AsyncStorage.setItem("role", "patient");
     navigation.replace("PatientDashboard"); // 🔑 navigate to Patient Dashboard
-  } else if (email === "caregiver@example.com" && password === "caregiver123") {
+  } else if (email === "c" && password === "c") {
     await AsyncStorage.setItem("role", "caregiver");
     navigation.replace("CaregiverDashboard");
   } else {

@@ -278,6 +278,24 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <Toggle value={isDark} onChange={() => toggleTheme()} />
           </View>
+        </View>
+
+        {/* API Configuration */}
+        <Text style={styles.sectionTitle}>API Configuration</Text>
+
+        <View style={styles.groupCard}>
+          <TouchableOpacity 
+            activeOpacity={0.8} 
+            style={styles.groupRow} 
+            onPress={() => navigation.navigate('ApiConfiguration')}
+          >
+            <View style={[styles.iconBg, { backgroundColor: '#dcfce7' }]}>
+              <MaterialIcons name="cloud" size={20} color="#22c55e" />
+            </View>
+            <Text style={styles.groupText}>Ngrok URL Settings</Text>
+            <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
+          </TouchableOpacity>
+        </View>
 
         {/* Logout Button */}
         <TouchableOpacity
@@ -295,9 +313,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <MaterialIcons name="logout" size={20} color="#ef4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
-
-          
-        </View>
       </ScrollView>
 
       {/* Optional success banner (hidden by default) */}
