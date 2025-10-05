@@ -32,10 +32,10 @@ jobs:
         run: npx expo prebuild --non-interactive
 
       #  Merge latest main into current branch (simulation)
-      - name:  Merge latest main into branch (simulate)
+      - name: Merge latest main into branch (simulate)
         run: |
           git fetch origin main
-          git merge origin/main --no-edit
+          git merge origin/main --allow-unrelated-histories --no-edit
 
       #  Test final mobile build (without running emulator)
       - name:  Validate merged build
