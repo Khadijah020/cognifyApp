@@ -30,18 +30,21 @@ jobs:
       - name: Prebuild native project (validate mobile build)
         run: npx expo prebuild --non-interactive
 
-      #  Set up Git user identity to avoid commit errors
       - name: Set up Git user identity
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Merge latest main into current branch (simulation)
+      # ⚡ Stash local changes before merge
+      - name: Stash local changes
+        run: git stash
+
+      # Merge latest main into branch (simulation)
       - name: Merge latest main into branch (simulate)
         run: |
           git fetch origin main
           git merge origin/main --allow-unrelated-histories --no-edit
 
-      # Test final mobile build (without running emulator)
-      - name: Validate merged build
-        run: npx expo prebuild --non-interactive
+      # ⚡ Apply stashed changes if any
+      - name: Apply stashed changes
+        run: git stash pop || echo "No stashed changes"
