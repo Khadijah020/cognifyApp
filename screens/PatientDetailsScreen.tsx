@@ -2,7 +2,7 @@
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -62,7 +62,7 @@ const R = {
   avatarSize: 128,
 };
 
-const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
+const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   const [fontsLoaded] = useFonts({
     Poppins_300Light,
     Poppins_400Regular,
@@ -74,9 +74,25 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   // Use patient data from context
   const { patient } = usePatient();
 
+  // Local toggle for showing/hiding patient sign-in password
+  const [showPassword, setShowPassword] = useState(false);
+
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: COLORS.bgTo }} />;
   }
+
+  // Safe formatting helpers
+  const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
+  const masked = (v?: string) =>
+    v && v.length ? '•'.repeat(Math.min(v.length, 12)) : '—';
+
+  const patientEmail = safe(patient?.email);
+  // NOTE: only show stored password if you actually keep a temp password in state.
+  // Prefer reset links in production; this is per your request.
+  const patientPasswordRaw = patient?.password as string | undefined;
+  const patientPasswordShown = showPassword
+    ? safe(patientPasswordRaw)
+    : masked(patientPasswordRaw);
 
   return (
     <View style={styles.root}>
@@ -112,9 +128,9 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={{ alignItems: 'center' }}>
             <View style={{ position: 'relative' }}>
               <View style={styles.avatar}>
-                {patient.avatar ? (
-                  <Image 
-                    source={{ uri: patient.avatar }} 
+                {patient?.avatar ? (
+                  <Image
+                    source={{ uri: patient.avatar }}
                     style={styles.avatarImg}
                   />
                 ) : (
@@ -130,37 +146,50 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
               </View>
             </View>
 
-            <Text style={styles.name}>{patient.name}</Text>
-            <Text style={styles.stage}>{patient.stage}</Text>
+            <Text style={styles.name}>{safe(patient?.name)}</Text>
+            <Text style={styles.stage}>{safe(patient?.stage)}</Text>
           </View>
         </View>
 
         {/* Personal Information */}
         <Text style={styles.sectionTitle}>Personal Information</Text>
         <View style={[styles.card, { gap: 24 }]}>
+          {/* NEW: Patient sign-in email */}
+          <Row
+            bg={COLORS.blue100}
+            icon={<MaterialIcons name="email" size={22} color={COLORS.blue500} />}
+            label="Patient Email"
+            value={patientEmail}
+          />
+
+          {/* NEW: Patient sign-in password (masked with eye toggle) */}
+          <RowPassword
+            bg={COLORS.teal100}
+            icon={<MaterialIcons name="lock" size={22} color={COLORS.teal500} />}
+            label="Patient Password"
+            value={patientPasswordShown}
+            onToggle={() => setShowPassword((s) => !s)}
+            toggled={showPassword}
+          />
+
+          {/* Existing fields */}
           <Row
             bg={COLORS.indigo100}
-            icon={
-              <MaterialIcons name="cake" size={22} color={COLORS.indigo500} />
-            }
+            icon={<MaterialIcons name="cake" size={22} color={COLORS.indigo500} />}
             label="Date of Birth"
-            value={patient.dob}
+            value={safe(patient?.dob)}
           />
           <Row
             bg={COLORS.purple100}
-            icon={
-              <MaterialIcons name="home" size={22} color={COLORS.purple500} />
-            }
+            icon={<MaterialIcons name="home" size={22} color={COLORS.purple500} />}
             label="Address"
-            value={patient.address}
+            value={safe(patient?.address)}
           />
           <Row
             bg={COLORS.teal100}
-            icon={
-              <MaterialIcons name="call" size={22} color={COLORS.teal500} />
-            }
+            icon={<MaterialIcons name="call" size={22} color={COLORS.teal500} />}
             label="Emergency Contact"
-            value={patient.emergency}
+            value={safe(patient?.emergency)}
           />
         </View>
 
@@ -169,39 +198,21 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={[styles.card, { gap: 24 }]}>
           <Row
             bg={COLORS.red100}
-            icon={
-              <MaterialIcons
-                name="warning-amber"
-                size={22}
-                color={COLORS.red500}
-              />
-            }
+            icon={<MaterialIcons name="warning-amber" size={22} color={COLORS.red500} />}
             label="Allergies"
-            value={patient.allergies}
+            value={safe(patient?.allergies)}
           />
           <Row
             bg={COLORS.blue100}
-            icon={
-              <MaterialCommunityIcons
-                name="medical-bag"
-                size={22}
-                color={COLORS.blue500}
-              />
-            }
+            icon={<MaterialCommunityIcons name="medical-bag" size={22} color={COLORS.blue500} />}
             label="Current Medications"
-            value={patient.meds}
+            value={safe(patient?.meds)}
           />
           <Row
             bg={COLORS.green100}
-            icon={
-              <MaterialCommunityIcons
-                name="heart-pulse"
-                size={22}
-                color={COLORS.green500}
-              />
-            }
+            icon={<MaterialCommunityIcons name="heart-pulse" size={22} color={COLORS.green500} />}
             label="Medical Conditions"
-            value={patient.conditions}
+            value={safe(patient?.conditions)}
           />
         </View>
 
@@ -210,37 +221,25 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={[styles.card]}>
           <View style={{ flexDirection: 'row' }}>
             <IconChip bg={COLORS.yellow100}>
-              <MaterialIcons
-                name="lightbulb"
-                size={22}
-                color={COLORS.yellow500}
-              />
+              <MaterialIcons name="lightbulb" size={22} color={COLORS.yellow500} />
             </IconChip>
             <View style={{ marginLeft: 16, flex: 1 }}>
               <Text style={styles.itemTitle}>Notes for Care</Text>
-              <Text style={styles.bodyText}>{patient.notes}</Text>
+              <Text style={styles.bodyText}>{safe(patient?.notes)}</Text>
             </View>
           </View>
 
           <View
-            style={{
-              height: 1,
-              backgroundColor: '#eaeef5',
-              marginVertical: 20,
-            }}
+            style={{ height: 1, backgroundColor: '#eaeef5', marginVertical: 20 }}
           />
 
           <View style={{ flexDirection: 'row' }}>
             <IconChip bg={COLORS.pink100}>
-              <MaterialIcons
-                name="thumb-up"
-                size={22}
-                color={COLORS.pink500}
-              />
+              <MaterialIcons name="thumb-up" size={22} color={COLORS.pink500} />
             </IconChip>
             <View style={{ marginLeft: 16, flex: 1 }}>
               <Text style={styles.itemTitle}>Likes & Dislikes</Text>
-              <Text style={styles.bodyText}>{patient.likes}</Text>
+              <Text style={styles.bodyText}>{safe(patient?.likes)}</Text>
             </View>
           </View>
         </View>
@@ -270,13 +269,8 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 };
 
 /* ───────── Small sub-components ───────── */
-const IconChip: React.FC<{ bg: string; children: React.ReactNode }> = ({
-  bg,
-  children,
-}) => (
-  <View style={[styles.iconBg, { backgroundColor: bg }]}>
-    {children}
-  </View>
+const IconChip: React.FC<{ bg: string; children: React.ReactNode }> = ({ bg, children }) => (
+  <View style={[styles.iconBg, { backgroundColor: bg }]}>{children}</View>
 );
 
 const Row: React.FC<{
@@ -291,6 +285,37 @@ const Row: React.FC<{
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
     </View>
+  </View>
+);
+
+// Row with eye toggle on the right (for password)
+const RowPassword: React.FC<{
+  bg: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  toggled: boolean;
+  onToggle: () => void;
+}> = ({ bg, icon, label, value, toggled, onToggle }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+    <IconChip bg={bg}>{icon}</IconChip>
+    <View style={{ marginLeft: 16, flex: 1 }}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+    <TouchableOpacity
+      onPress={onToggle}
+      style={styles.eyeBtn}
+      accessibilityRole="button"
+      accessibilityLabel={toggled ? 'Hide password' : 'Show password'}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <MaterialIcons
+        name={toggled ? 'visibility-off' : 'visibility'}
+        size={20}
+        color={COLORS.slate500}
+      />
+    </TouchableOpacity>
   </View>
 );
 
@@ -439,6 +464,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontFamily: 'Poppins_600SemiBold',
+  },
+
+  eyeBtn: {
+    padding: 6,
+    marginLeft: 8,
   },
 });
 

@@ -1,3 +1,4 @@
+import { supabase } from '../src/lib/supabase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -57,7 +58,9 @@ const Field: React.FC<{
   value: string;
   onChangeText: (t: string) => void;
   multiline?: boolean;
-}> = ({ label, value, onChangeText, multiline }) => {
+  keyboardType?: 'default' | 'email-address';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+}> = ({ label, value, onChangeText, multiline, keyboardType = 'default', autoCapitalize = 'words' }) => {
   const [focus, setFocus] = useState(false);
   const b = focus ? C.indigo500 : C.inputBorder;
 
@@ -75,8 +78,74 @@ const Field: React.FC<{
           placeholderTextColor={C.slate500}
           placeholder={`Enter ${label.toLowerCase()}`}
           autoCorrect={false}
-          autoCapitalize="words"
+          autoCapitalize={autoCapitalize}
+          keyboardType={keyboardType}
         />
+      </View>
+    </View>
+  );
+};
+
+async function createPatientIfNeeded(form: any) {
+  // Require both email + password to provision the account
+  if (!form.email || !form.password) {
+    Alert.alert('Missing credentials', 'Enter patient email and password.');
+    return null;
+  }
+  const { data, error } = await supabase.functions.invoke('provision_patient', {
+    body: {
+      email: String(form.email).trim().toLowerCase(),
+      password: form.password,
+      display_name: form.name || '',
+    },
+  });
+
+  if (error) {
+    Alert.alert('Provision failed', error.message ?? 'Could not create patient.');
+    return null;
+  }
+
+  // Returns: { patient_id }
+  return data?.patient_id as string | null;
+}
+
+
+
+/* Password input with eye toggle, styled exactly like Field */
+const PasswordField: React.FC<{
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+}> = ({ label, value, onChangeText }) => {
+  const [focus, setFocus] = useState(false);
+  const [show, setShow] = useState(false);
+  const b = focus ? C.indigo500 : C.inputBorder;
+
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={[styles.inputWrap, { borderColor: b, flexDirection: 'row', alignItems: 'center' }]}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          style={[styles.input, { flex: 1, paddingRight: 8 }]}
+          onFocus={() => setFocus(true)}
+          onBlur={() => setFocus(false)}
+          placeholderTextColor={C.slate500}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          autoCorrect={false}
+          autoCapitalize="none"
+          secureTextEntry={!show}
+        />
+        <TouchableOpacity
+          onPress={() => setShow(s => !s)}
+          style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={show ? 'Hide password' : 'Show password'}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <MaterialIcons name={show ? 'visibility-off' : 'visibility'} size={20} color={C.slate500} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -104,6 +173,10 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
     notes: patient?.notes || '',
     likes: patient?.likes || '',
     avatar: patient?.avatar,
+
+    // NEW: patient account creds caregiver will set
+    email: patient?.email || '',
+    password: patient?.password || '',
   }));
   const [avatar, setAvatar] = useState<string | undefined>(patient?.avatar);
 
@@ -181,6 +254,20 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
           {/* Personal Info */}
           <Text style={styles.sectionTitle}>Personal Information</Text>
           <View style={styles.card}>
+            {/* NEW: patient sign-in email & password */}
+            <Field
+              label="Patient Email"
+              value={form.email}
+              onChangeText={set('email')}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <PasswordField
+              label="Patient Password"
+              value={form.password}
+              onChangeText={set('password')}
+            />
+
             <Field label="Date of Birth" value={form.dob} onChangeText={set('dob')} />
             <Field label="Address" value={form.address} onChangeText={set('address')} />
             <Field label="Emergency Contact" value={form.emergency} onChangeText={set('emergency')} />
@@ -207,8 +294,25 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.95}
-              onPress={() => { updatePatient(form); navigation.goBack(); }}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={0.95}
+              onPress={async () => {
+              // 1) If this patient doesn’t exist yet, create them
+              // (You may track patient.id in context; if not, you can call and ignore duplicates)
+              const newPatientId = await createPatientIfNeeded(form);
+
+              // 2) Update local context / UI (you already do this)
+              updatePatient({
+                ...form,
+                id: newPatientId ?? patient?.id,     // keep id if we had it
+                // email stays in form.email; password should not be stored long-term in state
+              });
+
+              navigation.goBack();
+            }}
+
+            >
               <LinearGradient colors={[C.btnFrom, C.btnTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.saveBtn}>
                 <MaterialIcons name="save" size={20} color="#fff" />
                 <Text style={styles.saveText}>Save Changes</Text>
