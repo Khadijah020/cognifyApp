@@ -110,14 +110,8 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (uri) {
-        Alert.alert(
-          'Recording Complete',
-          'Audio ready to send to Colab for STT processing.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Process Audio', onPress: () => sendAudioToColab(uri) }
-          ]
-        );
+        // Automatically send to server without confirmation
+        sendAudioToColab(uri);
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
@@ -126,42 +120,22 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
 
   const sendAudioToColab = async (uri: string) => {
     try {
-      // Check if ngrok URL is configured
-      const ngrokUrl = await ApiService.getNgrokUrl();
-      if (!ngrokUrl) {
-        Alert.alert(
-          'Configuration Required',
-          'Please configure your Ngrok URL in Settings > API Configuration first.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
-          ]
-        );
-        return;
-      }
-
-      // Show processing message
-      Alert.alert('Processing', 'Sending audio to server for speech-to-text...');
-
+      console.log('🎤 Processing audio...');
+      
       // Send audio for STT processing
       const result = await ApiService.sendAudioForSTT(uri);
       
       // Process the transcript
       if (result.transcript) {
         setTranscript(result.transcript);
+        console.log('📝 Transcript received:', result.transcript);
         handleCommand(result.transcript.trim().toLowerCase());
-        
-        Alert.alert(
-          'Success',
-          `Transcription: "${result.transcript}"`,
-          [{ text: 'OK' }]
-        );
       }
     } catch (error) {
-      console.error('Error processing audio:', error);
+      console.error('❌ Error processing audio:', error);
       Alert.alert(
         'Error',
-        'Failed to process audio. Please check your Ngrok URL configuration and try again.',
+        'Failed to process audio. Make sure your ngrok URL is correct in ApiService.ts',
         [{ text: 'OK' }]
       );
     }

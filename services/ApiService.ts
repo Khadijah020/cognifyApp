@@ -1,55 +1,19 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const NGROK_URL_KEY = '@cognify_ngrok_url';
+// ⚠️ HARDCODED NGROK URL - Replace with your actual ngrok URL
+const NGROK_BASE_URL = 'https://c4bb124652e7.ngrok-free.app';
 
 export class ApiService {
   /**
-   * Save the ngrok URL to AsyncStorage
+   * Get the ngrok URL (hardcoded for now, will use DB later)
    */
-  static async saveNgrokUrl(url: string): Promise<void> {
-    try {
-      // Remove trailing slash if present
-      const cleanUrl = url.trim().replace(/\/$/, '');
-      await AsyncStorage.setItem(NGROK_URL_KEY, cleanUrl);
-    } catch (error) {
-      console.error('Error saving ngrok URL:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get the ngrok URL from AsyncStorage
-   */
-  static async getNgrokUrl(): Promise<string | null> {
-    try {
-      const url = await AsyncStorage.getItem(NGROK_URL_KEY);
-      return url;
-    } catch (error) {
-      console.error('Error getting ngrok URL:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Clear the saved ngrok URL
-   */
-  static async clearNgrokUrl(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(NGROK_URL_KEY);
-    } catch (error) {
-      console.error('Error clearing ngrok URL:', error);
-      throw error;
-    }
+  static getNgrokUrl(): string {
+    return NGROK_BASE_URL;
   }
 
   /**
    * Get the full API endpoint URL
    */
-  static async getApiEndpoint(path: string): Promise<string> {
-    const baseUrl = await this.getNgrokUrl();
-    if (!baseUrl) {
-      throw new Error('Ngrok URL not configured. Please set it in Settings > API Configuration.');
-    }
+  static getApiEndpoint(path: string): string {
+    const baseUrl = this.getNgrokUrl();
     // Ensure path starts with /
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     return `${baseUrl}${cleanPath}`;
@@ -60,10 +24,13 @@ export class ApiService {
    */
   static async sendAudioForSTT(audioUri: string): Promise<{ transcript: string }> {
     try {
-      const endpoint = await this.getApiEndpoint('/upload_audio');
+      const endpoint = this.getApiEndpoint('/upload_audio');
+      
+      console.log('🚀 Sending audio to:', endpoint);
+      console.log('📁 Audio file URI:', audioUri);
       
       const formData = new FormData();
-      formData.append('audio', {
+      formData.append('file', {
         uri: audioUri,
         type: 'audio/m4a',
         name: 'voice_recording.m4a',
@@ -77,14 +44,19 @@ export class ApiService {
         },
       });
 
+      console.log('📡 Response status:', response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Server error:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
+      console.log('✅ Received transcript:', result.transcript);
       return result;
     } catch (error) {
-      console.error('Error sending audio for STT:', error);
+      console.error('❌ Error sending audio for STT:', error);
       throw error;
     }
   }
