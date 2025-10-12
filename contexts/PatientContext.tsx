@@ -2,22 +2,26 @@
 import React, { createContext, useContext, useState } from 'react';
 
 export type Patient = {
+  id: string;
   name: string;
-  stage: string;
-  dob: string;
-  address: string;
-  emergency: string;
-  allergies: string;
-  meds: string;
-  conditions: string;
-  notes: string;
-  likes: string;
-  avatar?: string; // <-- Add this optional field
+  stage?: string;
+  dob?: string;
+  address?: string;
+  emergency?: string;
+  allergies?: string;
+  meds?: string;
+  conditions?: string;
+  notes?: string;
+  likes?: string;
+  avatar?: string;
+  password?: string;
+  email?: string;
 };
 
 
 const defaultPatient: Patient = {
-  name: 'John Doe',
+  id: '1',
+  name: 'John Doee',
   stage: 'Stage 4 Dementia',
   dob: 'January 15, 1945',
   address: '123 Memory Lane, Suite 2B',
@@ -28,6 +32,8 @@ const defaultPatient: Patient = {
   notes: 'John enjoys listening to classical music in the evenings...',
   likes: 'Likes: Gardening, Old Movies, Puzzles. Dislikes: Loud noises, Spicy food.',
   avatar: undefined,
+  password: '123456',
+  email: 'jane@gmail.com',
 };
 
 

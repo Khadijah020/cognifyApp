@@ -19,7 +19,7 @@
         "backgroundColor": "#E6F4FE"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
+      "predictiveBackGestureEnabled": false
     },
     "plugins": [
       [
@@ -38,6 +38,10 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "supabaseUrl": "https://xlusfzcawhoqzmdfgkwj.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdXNmemNhd2hvcXptZGZna3dqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTQxNzksImV4cCI6MjA3NDk5MDE3OX0.63Mjr3oWCgGlCGANKTVt9DfByxZPSzCBIAFtfX5zyxw"
     }
   }
 }
