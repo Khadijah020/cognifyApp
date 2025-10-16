@@ -1,4 +1,8 @@
 // AddPatientScreen.tsx
+import { MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -12,24 +16,21 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
+import { supabase } from '../src/lib/supabase'; // adjust path if needed
+
 
 import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddPatient'>;
 
-type Patient = {
+export type Patient = {
   id: string;
   fullName: string;
   dementiaStage: string;
@@ -56,6 +57,8 @@ export default function AddPatientScreen({ navigation }: Props) {
   });
 
   // form state
+  const [email, setEmail] = useState('');
+const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [dementiaStage, setDementiaStage] = useState('');
   const [dob, setDob] = useState('');
@@ -67,6 +70,22 @@ export default function AddPatientScreen({ navigation }: Props) {
   const [careNotes, setCareNotes] = useState('');
   const [likes, setLikes] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [caregiverId, setCaregiverId] = useState<string | null>(null);
+
+  useEffect(() => {
+  const fetchCaregiverId = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error("Error fetching user:", error.message);
+      return;
+    }
+    if (data?.user) {
+      setCaregiverId(data.user.id); // ← store caregiver UID
+      console.log("Caregiver UID set:", data.user.id);
+    }
+  };
+  fetchCaregiverId();
+}, []);
 
   useEffect(() => {
     // ask media permission once
@@ -88,39 +107,67 @@ export default function AddPatientScreen({ navigation }: Props) {
   };
 
   const savePatient = async () => {
-    if (!fullName.trim()) {
-      Alert.alert('Missing Info', 'Please enter the patient’s full name.');
-      return;
+  const mail = email.trim().toLowerCase();
+  if (!fullName.trim() || !mail || !password) {
+    Alert.alert('Missing Info', 'Please enter name, email, and password.');
+    return;
+  }
+
+  try {
+    console.log('== SENDING PATIENT REGISTRATION REQUEST ==');
+
+    // 1️⃣ Get logged-in caregiver ID (from Supabase session)
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      throw new Error('Could not get caregiver session.');
     }
 
-    const newPatient: Patient = {
-      id: Date.now().toString(),
-      fullName: fullName.trim(),
-      dementiaStage: dementiaStage.trim(),
-      dob: dob.trim(),
-      address: address.trim(),
-      emergencyContact: emergencyContact.trim(),
-      allergies: allergies.trim(),
-      medications: medications.trim(),
-      conditions: conditions.trim(),
-      careNotes: careNotes.trim(),
-      likes: likes.trim(),
-      avatarUri,
-      createdAt: new Date().toISOString(),
-    };
+    const caregiverId = userData.user.id;
 
-    try {
-      const existing = await AsyncStorage.getItem(STORAGE_KEY);
-      const arr: Patient[] = existing ? JSON.parse(existing) : [];
-      arr.unshift(newPatient);
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-      Alert.alert('Success', 'Patient added successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } catch {
-      Alert.alert('Error', 'Failed to save patient. Please try again.');
+    // 2️⃣ Prepare the request body
+    const payload = {
+  caregiver_id: caregiverId,
+  email: mail,
+  password,
+  full_name: fullName,
+  dementia_stage: dementiaStage,
+  dob,
+  address,
+  emergency_contact: emergencyContact,
+  allergies,
+  medications,
+  conditions,
+  notes: careNotes,
+  likes,
+  avatar_uri: avatarUri,
+};
+
+
+    // 3️⃣ Send request to your backend endpoint
+    const response = await fetch('https://e415929b4bf2.ngrok-free.app/register_patient', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log('Backend response:', result);
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to add patient.');
     }
-  };
+
+    Alert.alert('Success', 'Patient added successfully!', [
+      { text: 'OK', onPress: () => navigation.goBack() },
+    ]);
+  } catch (err: any) {
+    console.error('Error adding patient:', err.message);
+    Alert.alert('Error', err.message);
+  }
+};
+
+
+
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#f0f4ff' }} />;
 
@@ -160,8 +207,15 @@ export default function AddPatientScreen({ navigation }: Props) {
             </View>
 
             <View style={{ marginTop: 24 }}>
+<Input label="Email" placeholder="Enter email" value={email} onChangeText={setEmail} />
+<Spacer />
+<Input label="Password" placeholder="Enter password" value={password} onChangeText={setPassword} />
+              <View style={{ height: 12 }} />
+
+
               <Input label="Full Name" placeholder="Enter full name" value={fullName} onChangeText={setFullName} />
               <View style={{ height: 12 }} />
+              
               <Input
                 label="Dementia Stage"
                 placeholder="e.g., Stage 4 Dementia"
@@ -285,6 +339,8 @@ function Input({
     </View>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f0f4ff' },

@@ -88,68 +88,79 @@ export default function LoginScreen({ navigation }: Props) {
       if (pt) role = "patient";
     }
 
-    if (role === "patient") {
-      await AsyncStorage.setItem("role", "patient");
-      navigation.replace("PatientDashboard");
-      return;
-    }
+    // 🔹 New: fetch the signed-in user and check metadata role
+const {
+  data: { user: freshUser },
+  error: userErr,
+} = await supabase.auth.getUser();
 
-    if (role === "caregiver") {
-      await AsyncStorage.setItem("role", "caregiver");
-      navigation.replace("CaregiverDashboard");
-      return;
-    }
+if (userErr) {
+  Alert.alert("Error", "Failed to fetch user info");
+  return;
+}
 
-    Alert.alert(
-      "No role found",
-      "Your account is missing a role/profile. Ask your caregiver/admin to complete setup."
-    );
+
+if (role === "patient") {
+  await AsyncStorage.setItem("role", "patient");
+  navigation.replace("PatientDashboard");
+  return
+} else {
+  await AsyncStorage.setItem("role", "caregiver");
+  navigation.replace("CaregiverDashboard");
+  return
+}
+
+
   };
 
   const handleLogin = async () => {
-    const mail = email.trim().toLowerCase();
+  const mail = email.trim().toLowerCase();
 
-    if (!mail || !password) {
-      Alert.alert("Error", "Please enter email and password");
+  if (!mail || !password) {
+    Alert.alert("Error", "Please enter email and password");
+    return;
+  }
+
+  try {
+    setSubmitting(true);
+
+    // Sign in with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: mail,
+      password,
+    });
+
+    if (error) {
+      // Helpful message for unconfirmed email
+      const msg =
+        /confirm/i.test(error.message)
+          ? "Please confirm your email before signing in."
+          : error.message;
+      Alert.alert("Login Failed", msg);
       return;
     }
 
-    try {
-      setSubmitting(true);
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: mail,
-        password,
-      });
-
-      if (error) {
-        // Common helpful message for unconfirmed email
-        const msg =
-          /confirm/i.test(error.message)
-            ? "Please confirm your email before signing in."
-            : error.message;
-        Alert.alert("Login Failed", msg);
-        return;
-      }
-
-      const user = data.user;
-      if (!user) {
-        Alert.alert("Login Failed", "No user returned.");
-        return;
-      }
-
-      await AsyncStorage.multiSet([
-        ["userEmail", mail],
-        ["userId", user.id],
-      ]);
-
-      await getRoleAndNavigate();
-    } catch (e: any) {
-      Alert.alert("Login Error", e?.message ?? "Something went wrong.");
-    } finally {
-      setSubmitting(false);
+    const user = data.user;
+    if (!user) {
+      Alert.alert("Login Failed", "No user returned.");
+      return;
     }
-  };
+
+    // Store user info locally
+    await AsyncStorage.multiSet([
+      ["userEmail", mail],
+      ["userId", user.id],
+    ]);
+
+    // Fetch role and navigate
+    await getRoleAndNavigate();
+
+  } catch (e: any) {
+    Alert.alert("Login Error", e?.message ?? "Something went wrong.");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     const mail = email.trim().toLowerCase();
