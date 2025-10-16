@@ -1,55 +1,21 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 
-const NGROK_URL_KEY = '@cognify_ngrok_url';
+// ⚠️ HARDCODED NGROK URL - Replace with your actual ngrok URL
+const NGROK_BASE_URL = 'https://cb76b9f20e1b.ngrok-free.app';
 
 export class ApiService {
   /**
-   * Save the ngrok URL to AsyncStorage
+   * Get the ngrok URL (hardcoded for now, will use DB later)
    */
-  static async saveNgrokUrl(url: string): Promise<void> {
-    try {
-      // Remove trailing slash if present
-      const cleanUrl = url.trim().replace(/\/$/, '');
-      await AsyncStorage.setItem(NGROK_URL_KEY, cleanUrl);
-    } catch (error) {
-      console.error('Error saving ngrok URL:', error);
-      throw error;
-    }
+  static getNgrokUrl(): string {
+    return NGROK_BASE_URL;
   }
 
-  /**
-   * Get the ngrok URL from AsyncStorage
-   */
-  static async getNgrokUrl(): Promise<string | null> {
-    try {
-      const url = await AsyncStorage.getItem(NGROK_URL_KEY);
-      return url;
-    } catch (error) {
-      console.error('Error getting ngrok URL:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Clear the saved ngrok URL
-   */
-  static async clearNgrokUrl(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(NGROK_URL_KEY);
-    } catch (error) {
-      console.error('Error clearing ngrok URL:', error);
-      throw error;
-    }
-  }
-
-  /**
+  /**r
    * Get the full API endpoint URL
    */
-  static async getApiEndpoint(path: string): Promise<string> {
-    const baseUrl = await this.getNgrokUrl();
-    if (!baseUrl) {
-      throw new Error('Ngrok URL not configured. Please set it in Settings > API Configuration.');
-    }
+  static getApiEndpoint(path: string): string {
+    const baseUrl = this.getNgrokUrl();
     // Ensure path starts with /
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     return `${baseUrl}${cleanPath}`;
@@ -60,31 +26,36 @@ export class ApiService {
    */
   static async sendAudioForSTT(audioUri: string): Promise<{ transcript: string }> {
     try {
-      const endpoint = await this.getApiEndpoint('/upload_audio');
+      const endpoint = this.getApiEndpoint('/upload_audio');
       
-      const formData = new FormData();
-      formData.append('audio', {
-        uri: audioUri,
-        type: 'audio/m4a',
-        name: 'voice_recording.m4a',
-      } as any);
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
+      console.log('🚀 Sending audio to:', endpoint);
+      console.log('📁 Audio file URI:', audioUri);
+      
+      // Use FileSystem.uploadAsync for better compatibility with iOS
+      // This method handles file reading and multipart form data automatically
+      const uploadResult = await FileSystemLegacy.uploadAsync(endpoint, audioUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      console.log('📡 Response status:', uploadResult.status);
+      console.log('📡 Response body:', uploadResult.body);
+
+      if (uploadResult.status !== 200) {
+        console.error('❌ Server error:', uploadResult.body);
+        throw new Error(`HTTP error! status: ${uploadResult.status}`);
       }
 
-      const result = await response.json();
+      const result = JSON.parse(uploadResult.body);
+      console.log('✅ Received transcript:', result.transcript);
       return result;
     } catch (error) {
-      console.error('Error sending audio for STT:', error);
+      console.error('❌ Error sending audio for STT:', error);
       throw error;
     }
   }
