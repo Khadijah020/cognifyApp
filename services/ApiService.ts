@@ -6,6 +6,7 @@ const NGROK_BASE_URL = 'https://cb76b9f20e1b.ngrok-free.app';
 export class ApiService {
   /**
    * Get the ngrok URL (hardcoded for now, will use DB later)
+   * Get the ngrok URL (hardcoded for now, will use DB later)
    */
   static getNgrokUrl(): string {
     return NGROK_BASE_URL;
@@ -14,6 +15,8 @@ export class ApiService {
   /**r
    * Get the full API endpoint URL
    */
+  static getApiEndpoint(path: string): string {
+    const baseUrl = this.getNgrokUrl();
   static getApiEndpoint(path: string): string {
     const baseUrl = this.getNgrokUrl();
     // Ensure path starts with /
@@ -43,6 +46,8 @@ export class ApiService {
         },
       });
 
+      console.log('📡 Response status:', response.status);
+
       console.log('📡 Response status:', uploadResult.status);
       console.log('📡 Response body:', uploadResult.body);
 
@@ -55,6 +60,7 @@ export class ApiService {
       console.log('✅ Received transcript:', result.transcript);
       return result;
     } catch (error) {
+      console.error('❌ Error sending audio for STT:', error);
       console.error('❌ Error sending audio for STT:', error);
       throw error;
     }

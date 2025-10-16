@@ -227,6 +227,8 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
     try {
       console.log('🎤 Processing audio...');
       
+      console.log('🎤 Processing audio...');
+      
       // Send audio for STT processing
       const result = await ApiService.sendAudioForSTT(uri);
       
@@ -241,6 +243,7 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       // Process the transcript
       if (result.transcript) {
         setTranscript(result.transcript);
+        console.log('📝 Transcript received:', result.transcript);
         console.log('📝 Transcript received:', result.transcript);
         handleCommand(result.transcript.trim().toLowerCase());
       }
@@ -257,6 +260,7 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       
       Alert.alert(
         'Error',
+        'Failed to process audio. Make sure your ngrok URL is correct in ApiService.ts',
         'Failed to process audio. Make sure your ngrok URL is correct in ApiService.ts',
         [{ text: 'OK' }]
       );
