@@ -1,4 +1,14 @@
 // src/screens/SignupScreen.tsx
+import {
+  SpaceGrotesk_400Regular,
+  SpaceGrotesk_500Medium,
+  SpaceGrotesk_700Bold,
+  useFonts,
+} from "@expo-google-fonts/space-grotesk";
+import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import AppLoading from "expo-app-loading";
 import React, { useState } from "react";
 import {
   Alert,
@@ -9,18 +19,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
-import AppLoading from "expo-app-loading";
-import {
-  useFonts,
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_700Bold,
-} from "@expo-google-fonts/space-grotesk";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { supabase } from "../src/lib/supabase";
 import { RootStackParamList } from "../app/App";
+import { supabase } from "../src/lib/supabase";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Signup">;
 
@@ -64,7 +64,7 @@ export default function SignupScreen({ navigation }: Props) {
   try {
     setSubmitting(true);
 
-    // 1) Create auth user (session should be returned immediately)
+    // 1️⃣ Create caregiver in auth
     const { data, error } = await supabase.auth.signUp({
       email: mail,
       password,
@@ -76,39 +76,37 @@ export default function SignupScreen({ navigation }: Props) {
 
     const user = data.user;
     const session = data.session;
-    if (!user || !session) {
-      throw new Error("No session after signup. Make sure email confirmation is disabled.");
+
+    if (!user) {
+      throw new Error("No user returned from Supabase signUp");
     }
 
-    // 2) Create profile row (RLS allows insert when id = auth.uid())
-    const { error: pErr } = await supabase.from("profiles").insert({
-      id: user.id,                 // must equal auth.users.id
-      email: mail,
-      role: "caregiver",
-      display_name: `${first} ${last}`,
-    });
-    if (pErr && pErr.code !== "23505") throw pErr;
+    // 2️⃣ Add entry in caregivers table
+    const { error: cErr } = await supabase.from("caregivers").insert([
+      {
+        id: user.id,
+        email: mail,
+        full_name: `${first} ${last}`,
+      },
+    ]);
+    if (cErr) throw cErr;
 
-    // 3) Create caregivers row (self)
-    const { error: cErr } = await supabase.from("caregivers").insert({
-      id: user.id,
-    });
-    if (cErr && cErr.code !== "23505") throw cErr;
-
-    // 4) Cache and navigate
+    // 3️⃣ Cache local data
     await AsyncStorage.multiSet([
       ["userEmail", mail],
       ["userId", user.id],
       ["role", "caregiver"],
     ]);
+
+    // 4️⃣ Navigate to dashboard
     navigation.replace("CaregiverDashboard");
   } catch (e: any) {
-    Alert.alert("Signup failed", e?.message ?? "Something went wrong.");
+    console.error("Signup Error:", e);
+    Alert.alert("Signup failed", e.message || "Something went wrong");
   } finally {
     setSubmitting(false);
   }
 };
-
 
   return (
     <SafeAreaView style={styles.safe}>

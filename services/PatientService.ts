@@ -1,5 +1,5 @@
 // src/lib/supabase.ts or wherever your API functions are
-import { Patient } from '../screens/AddPatientScreen'; // import type if needed
+import { Patient } from '../contexts/PatientContext'; // import type if needed
 import { supabase } from '../src/lib/supabase'; // adjust path
 
 export async function getPatients(): Promise<Patient[]> {
@@ -14,20 +14,21 @@ export async function getPatients(): Promise<Patient[]> {
 
 
     const patients: Patient[] = data?.map((p: any) => ({
-      id: p.id,
-      fullName: p.display_name,
-      dementiaStage: '',
-      dob: '',
-      address: '',
-      emergencyContact: '',
-      allergies: '',
-      medications: '',
-      conditions: '',
-      careNotes: '',
-      likes: '',
-      avatarUri: null,
-      createdAt: p.created_at || '',
-    })) ?? [];
+  patient_id: p.id,
+  fullName: p.display_name || '',
+  stage: '',              // you can fill later
+  dob: '',
+  address: '',
+  emergency: '',
+  allergies: '',
+  meds: '',
+  conditions: '',
+  notes: '',
+  likes: '',
+  avatar: null,
+  email: p.email || '',
+})) ?? [];
+
 
     return patients;
   } catch (err) {

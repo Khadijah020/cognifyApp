@@ -1,10 +1,10 @@
-import { supabase } from '../src/lib/supabase';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -17,173 +17,137 @@ import {
   View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
-import { usePatient } from '../contexts/PatientContext';
-
-import {
-  Poppins_300Light,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
-} from '@expo-google-fonts/poppins';
+import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditPatientDetails'>;
 
-/* ───────── Design Tokens (match mock) ───────── */
-const C = {
+const COLORS = {
   bgFrom: '#e0e7ff',
-  bgTo:   '#f0f4ff',
+  bgTo: '#f0f4ff',
   slate800: '#1e293b',
   slate700: '#334155',
   slate600: '#475569',
   slate500: '#64748b',
   slate400: '#94a3b8',
+  slate100: '#f1f5f9',
   white: '#ffffff',
-  inputBg: '#f8fafc',
-  inputBorder: '#e2e8f0',
+  indigo100: '#e0e7ff',
   indigo500: '#6366f1',
+  purple100: '#f3e8ff',
+  purple500: '#a855f7',
+  teal100: '#ccfbf1',
+  teal500: '#14b8a6',
+  red100: '#fee2e2',
+  red500: '#ef4444',
+  blue100: '#dbeafe',
+  blue500: '#3b82f6',
+  green100: '#dcfce7',
+  green500: '#22c55e',
+  yellow100: '#fef9c3',
+  yellow500: '#eab308',
+  pink100: '#ffe4e6',
+  pink500: '#ec4899',
   btnFrom: '#818cf8',
   btnTo: '#6366f1',
+  gray200: '#e5e7eb',
+  gray300: '#d1d5db',
 };
 
-const R = {
-  cardRadius: 20,
-  avatar: 128,
-};
+const R = { cardRadius: 20, chipRadius: 12, avatarSize: 128 };
 
-/* Reusable field (single + multiline) */
-const Field: React.FC<{
-  label: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  multiline?: boolean;
-  keyboardType?: 'default' | 'email-address';
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-}> = ({ label, value, onChangeText, multiline, keyboardType = 'default', autoCapitalize = 'words' }) => {
-  const [focus, setFocus] = useState(false);
-  const b = focus ? C.indigo500 : C.inputBorder;
-
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={[styles.inputWrap, { borderColor: b }]}>
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          style={[styles.input, multiline && { height: 120, textAlignVertical: 'top' }]}
-          multiline={!!multiline}
-          onFocus={() => setFocus(true)}
-          onBlur={() => setFocus(false)}
-          placeholderTextColor={C.slate500}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          autoCorrect={false}
-          autoCapitalize={autoCapitalize}
-          keyboardType={keyboardType}
-        />
-      </View>
-    </View>
-  );
-};
-
-async function createPatientIfNeeded(form: any) {
-  // Require both email + password to provision the account
-  if (!form.email || !form.password) {
-    Alert.alert('Missing credentials', 'Enter patient email and password.');
-    return null;
-  }
-  const { data, error } = await supabase.functions.invoke('provision_patient', {
-    body: {
-      email: String(form.email).trim().toLowerCase(),
-      password: form.password,
-      display_name: form.name || '',
-    },
-  });
-
-  if (error) {
-    Alert.alert('Provision failed', error.message ?? 'Could not create patient.');
-    return null;
-  }
-
-  // Returns: { patient_id }
-  return data?.patient_id as string | null;
+interface PatientData {
+  patient_id: string;
+  email: string;
+  full_name: string;
+  dob: string;
+  address: string;
+  emergency_contact: string;
+  allergies: string;
+  medications: string;
+  conditions: string;
+  dementia_stage: string;
+  likes: string;
+  notes: string;
+  avatar_uri: string;
 }
 
-
-
-/* Password input with eye toggle, styled exactly like Field */
-const PasswordField: React.FC<{
+interface EditableField {
+  key: keyof PatientData;
   label: string;
-  value: string;
-  onChangeText: (t: string) => void;
-}> = ({ label, value, onChangeText }) => {
-  const [focus, setFocus] = useState(false);
-  const [show, setShow] = useState(false);
-  const b = focus ? C.indigo500 : C.inputBorder;
-
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={[styles.inputWrap, { borderColor: b, flexDirection: 'row', alignItems: 'center' }]}>
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          style={[styles.input, { flex: 1, paddingRight: 8 }]}
-          onFocus={() => setFocus(true)}
-          onBlur={() => setFocus(false)}
-          placeholderTextColor={C.slate500}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          autoCorrect={false}
-          autoCapitalize="none"
-          secureTextEntry={!show}
-        />
-        <TouchableOpacity
-          onPress={() => setShow(s => !s)}
-          style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-          accessibilityRole="button"
-          accessibilityLabel={show ? 'Hide password' : 'Show password'}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <MaterialIcons name={show ? 'visibility-off' : 'visibility'} size={20} color={C.slate500} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
+  bg: string;
+  icon: React.ReactNode;
+  multiline?: boolean;
+}
 
 const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
-  const [fontsLoaded] = useFonts({
-    Poppins_300Light,
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-  });
-  const { patient, updatePatient } = usePatient();
+  const [patient, setPatient] = useState<PatientData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [avatar, setAvatar] = useState<string>('');
 
-  const [form, setForm] = useState(() => ({
-    name: patient?.name || '',
-    stage: patient?.stage || '',
-    dob: patient?.dob || '',
-    address: patient?.address || '',
-    emergency: patient?.emergency || '',
-    allergies: patient?.allergies || '',
-    meds: patient?.meds || '',
-    conditions: patient?.conditions || '',
-    notes: patient?.notes || '',
-    likes: patient?.likes || '',
-    avatar: patient?.avatar,
+  useEffect(() => {
+    fetchPatientDetails();
+  }, []);
 
-    // NEW: patient account creds caregiver will set
-    email: patient?.email || '',
-    password: patient?.password || '',
-  }));
-  const [avatar, setAvatar] = useState<string | undefined>(patient?.avatar);
+  const fetchPatientDetails = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const caregiverId = session?.user?.id;
 
-  const set = (key: keyof typeof form) => (t: string) =>
-    setForm((p) => ({ ...p, [key]: t }));
+      if (!caregiverId) {
+        console.warn('No caregiver session found');
+        setLoading(false);
+        return;
+      }
 
-  const spacer = useMemo(() => <View style={{ width: 32 }} />, []);
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients')
+        .select('id, email, full_name')
+        .eq('caregiver_id', caregiverId)
+        .single();
+
+      if (patientError) {
+        console.error('Error fetching patient:', patientError.message);
+        setLoading(false);
+        return;
+      }
+
+      const { data: detailsData, error: detailsError } = await supabase
+        .from('patient_details')
+        .select('*')
+        .eq('patient_id', patientData.id)
+        .single();
+
+      if (detailsError) {
+        console.error('Error fetching patient details:', detailsError.message);
+      }
+
+      const flattenedData: PatientData = {
+        patient_id: patientData.id,
+        email: patientData.email,
+        full_name: patientData.full_name,
+        dob: detailsData?.dob || '',
+        address: detailsData?.address || '',
+        emergency_contact: detailsData?.emergency_contact || '',
+        allergies: detailsData?.allergies || '',
+        medications: detailsData?.medications || '',
+        conditions: detailsData?.conditions || '',
+        dementia_stage: detailsData?.dementia_stage || '',
+        likes: detailsData?.likes || '',
+        notes: detailsData?.notes || '',
+        avatar_uri: detailsData?.avatar_uri || '',
+      };
+      setPatient(flattenedData);
+      setAvatar(flattenedData.avatar_uri);
+    } catch (err) {
+      console.error('Unexpected error fetching patient details:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -200,35 +164,204 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
     if (!res.canceled) {
       const uri = res.assets[0].uri;
       setAvatar(uri);
-      setForm((p) => ({ ...p, avatar: uri }));
+      await uploadAvatar(uri);
     }
   };
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
+  const uploadAvatar = async (uri: string) => {
+    if (!patient) return;
+
+    try {
+      setSaving(true);
+      const fileName = `${patient.patient_id}_avatar_${Date.now()}.jpg`;
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: fileName,
+        type: 'image/jpeg',
+      } as any);
+
+      const { data, error } = await supabase.storage
+        .from('patient_avatars')
+        .upload(fileName, formData);
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('patient_avatars')
+        .getPublicUrl(fileName);
+
+      // Update patient_details with new avatar
+      const { error: updateError } = await supabase
+        .from('patient_details')
+        .update({ avatar_uri: urlData.publicUrl })
+        .eq('patient_id', patient.patient_id);
+
+      if (updateError) throw updateError;
+
+      setPatient((p) => (p ? { ...p, avatar_uri: urlData.publicUrl } : p));
+    } catch (err) {
+      console.error('Avatar upload error:', err);
+      Alert.alert('Upload failed', 'Could not upload avatar.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (fieldKey: string, currentValue: string) => {
+    setEditingField(fieldKey);
+    setEditValue(currentValue);
+  };
+
+  const saveFieldChange = async (fieldKey: keyof PatientData) => {
+    if (!patient) return;
+
+    try {
+      setSaving(true);
+
+      // Determine which table and field to update
+      const fieldsInPatients = ['email', 'full_name'];
+      let updateData: any = {};
+
+      if (fieldsInPatients.includes(fieldKey)) {
+        // Update patients table
+        updateData[fieldKey === 'full_name' ? 'full_name' : 'email'] = editValue;
+        const { error } = await supabase
+          .from('patients')
+          .update(updateData)
+          .eq('id', patient.patient_id);
+
+        if (error) throw error;
+      } else {
+        // Update patient_details table
+        updateData[fieldKey] = editValue;
+        const { error } = await supabase
+          .from('patient_details')
+          .update(updateData)
+          .eq('patient_id', patient.patient_id);
+
+        if (error) throw error;
+      }
+
+      // Update local state
+      setPatient((p) => (p ? { ...p, [fieldKey]: editValue } : p));
+      setEditingField(null);
+      setEditValue('');
+      Alert.alert('Success', 'Field updated successfully!');
+    } catch (err) {
+      console.error('Update error:', err);
+      Alert.alert('Error', 'Failed to update field.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingField(null);
+    setEditValue('');
+  };
+
+  const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
+
+  if (loading) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.btnTo} />
+        <Text style={{ marginTop: 12, color: COLORS.slate500 }}>Loading patient details...</Text>
+      </View>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ color: COLORS.slate500 }}>No patient details found.</Text>
+      </View>
+    );
+  }
+
+  const editableFields: EditableField[] = [
+    {
+      key: 'email',
+      label: 'Patient Email',
+      bg: COLORS.blue100,
+      icon: <MaterialIcons name="email" size={22} color={COLORS.blue500} />,
+    },
+    {
+      key: 'dob',
+      label: 'Date of Birth',
+      bg: COLORS.indigo100,
+      icon: <MaterialIcons name="cake" size={22} color={COLORS.indigo500} />,
+    },
+    {
+      key: 'address',
+      label: 'Address',
+      bg: COLORS.purple100,
+      icon: <MaterialIcons name="home" size={22} color={COLORS.purple500} />,
+    },
+    {
+      key: 'emergency_contact',
+      label: 'Emergency Contact',
+      bg: COLORS.teal100,
+      icon: <MaterialIcons name="call" size={22} color={COLORS.teal500} />,
+    },
+    {
+      key: 'allergies',
+      label: 'Allergies',
+      bg: COLORS.red100,
+      icon: <MaterialIcons name="warning-amber" size={22} color={COLORS.red500} />,
+    },
+    {
+      key: 'medications',
+      label: 'Current Medications',
+      bg: COLORS.blue100,
+      icon: <MaterialCommunityIcons name="medical-bag" size={22} color={COLORS.blue500} />,
+    },
+    {
+      key: 'conditions',
+      label: 'Medical Conditions',
+      bg: COLORS.green100,
+      icon: <MaterialCommunityIcons name="heart-pulse" size={22} color={COLORS.green500} />,
+    },
+    {
+      key: 'notes',
+      label: 'Notes for Care',
+      bg: COLORS.yellow100,
+      icon: <MaterialIcons name="lightbulb" size={22} color={COLORS.yellow500} />,
+      multiline: true,
+    },
+    {
+      key: 'likes',
+      label: 'Likes & Dislikes',
+      bg: COLORS.pink100,
+      icon: <MaterialIcons name="thumb-up" size={22} color={COLORS.pink500} />,
+      multiline: true,
+    },
+  ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bgTo }}>
+    <View style={styles.root}>
+      <LinearGradient colors={[COLORS.bgFrom, COLORS.bgTo]} style={StyleSheet.absoluteFill} />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <MaterialIcons name="arrow-back-ios-new" size={20} color={C.slate600} />
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back-ios-new" size={20} color={COLORS.slate600} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Patient Details</Text>
-        {spacer}
+        <View style={{ width: 32 }} />
       </View>
 
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 28 }}
-          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
           showsVerticalScrollIndicator={false}
-          bounces={true}
         >
-          {/* Avatar + name card */}
+          {/* Profile Card */}
           <View style={[styles.card, { marginTop: 8 }]}>
             <View style={{ alignItems: 'center' }}>
               <View style={{ position: 'relative' }}>
@@ -236,88 +369,78 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
                   {avatar ? (
                     <Image source={{ uri: avatar }} style={styles.avatarImg} />
                   ) : (
-                    <MaterialIcons name="person" size={64} color={C.slate400} />
+                    <MaterialIcons name="person" size={64} color={COLORS.slate400} />
                   )}
                 </View>
-                <TouchableOpacity style={styles.cameraFab} onPress={pickImage} activeOpacity={0.85}>
+                <TouchableOpacity
+                  style={styles.cameraFab}
+                  onPress={pickImage}
+                  disabled={saving}
+                >
                   <MaterialIcons name="photo-camera" size={22} color="#fff" />
                 </TouchableOpacity>
               </View>
 
-              <View style={{ width: '100%', marginTop: 24 }}>
-                <Field label="Full Name" value={form.name} onChangeText={set('name')} />
-                <Field label="Dementia Stage" value={form.stage} onChangeText={set('stage')} />
-              </View>
+              <Text style={styles.name}>{safe(patient?.full_name)}</Text>
+              <Text style={styles.stage}>Stage: {safe(patient?.dementia_stage)}</Text>
             </View>
           </View>
 
-          {/* Personal Info */}
+          {/* Personal Information */}
           <Text style={styles.sectionTitle}>Personal Information</Text>
-          <View style={styles.card}>
-            {/* NEW: patient sign-in email & password */}
-            <Field
-              label="Patient Email"
-              value={form.email}
-              onChangeText={set('email')}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <PasswordField
-              label="Patient Password"
-              value={form.password}
-              onChangeText={set('password')}
-            />
-
-            <Field label="Date of Birth" value={form.dob} onChangeText={set('dob')} />
-            <Field label="Address" value={form.address} onChangeText={set('address')} />
-            <Field label="Emergency Contact" value={form.emergency} onChangeText={set('emergency')} />
+          <View style={[styles.card, { gap: 20 }]}>
+            {editableFields.slice(0, 4).map((field) => (
+              <EditableRow
+                key={field.key}
+                field={field}
+                value={safe(patient[field.key])}
+                isEditing={editingField === field.key}
+                editValue={editValue}
+                onEdit={() => startEdit(field.key, patient[field.key])}
+                onSave={() => saveFieldChange(field.key)}
+                onCancel={cancelEdit}
+                onChangeText={setEditValue}
+                isSaving={saving}
+              />
+            ))}
           </View>
 
           {/* Medical Details */}
           <Text style={styles.sectionTitle}>Medical Details</Text>
-          <View style={styles.card}>
-            <Field label="Allergies" value={form.allergies} onChangeText={set('allergies')} />
-            <Field label="Current Medications" value={form.meds} onChangeText={set('meds')} />
-            <Field label="Medical Conditions" value={form.conditions} onChangeText={set('conditions')} />
+          <View style={[styles.card, { gap: 20 }]}>
+            {editableFields.slice(4, 7).map((field) => (
+              <EditableRow
+                key={field.key}
+                field={field}
+                value={safe(patient[field.key])}
+                isEditing={editingField === field.key}
+                editValue={editValue}
+                onEdit={() => startEdit(field.key, patient[field.key])}
+                onSave={() => saveFieldChange(field.key)}
+                onCancel={cancelEdit}
+                onChangeText={setEditValue}
+                isSaving={saving}
+              />
+            ))}
           </View>
 
           {/* Preferences & Notes */}
           <Text style={styles.sectionTitle}>Preferences & Notes</Text>
-          <View style={styles.card}>
-            <Field label="Notes for Care" value={form.notes} onChangeText={set('notes')} multiline />
-            <Field label="Likes & Dislikes" value={form.likes} onChangeText={set('likes')} multiline />
-          </View>
-
-          {/* Footer buttons */}
-          <View style={styles.footerRow}>
-            <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.9} onPress={() => navigation.goBack()}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              activeOpacity={0.95}
-              onPress={async () => {
-              // 1) If this patient doesn’t exist yet, create them
-              // (You may track patient.id in context; if not, you can call and ignore duplicates)
-              const newPatientId = await createPatientIfNeeded(form);
-
-              // 2) Update local context / UI (you already do this)
-              updatePatient({
-                ...form,
-                id: newPatientId ?? patient?.id,     // keep id if we had it
-                // email stays in form.email; password should not be stored long-term in state
-              });
-
-              navigation.goBack();
-            }}
-
-            >
-              <LinearGradient colors={[C.btnFrom, C.btnTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.saveBtn}>
-                <MaterialIcons name="save" size={20} color="#fff" />
-                <Text style={styles.saveText}>Save Changes</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+          <View style={[styles.card, { gap: 20 }]}>
+            {editableFields.slice(7).map((field) => (
+              <EditableRow
+                key={field.key}
+                field={field}
+                value={safe(patient[field.key])}
+                isEditing={editingField === field.key}
+                editValue={editValue}
+                onEdit={() => startEdit(field.key, patient[field.key])}
+                onSave={() => saveFieldChange(field.key)}
+                onCancel={cancelEdit}
+                onChangeText={setEditValue}
+                isSaving={saving}
+              />
+            ))}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -325,11 +448,87 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-/* ───────── Styles (crafted to match the mock exactly) ───────── */
+interface EditableRowProps {
+  field: EditableField;
+  value: string;
+  isEditing: boolean;
+  editValue: string;
+  onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onChangeText: (text: string) => void;
+  isSaving: boolean;
+}
+
+const EditableRow: React.FC<EditableRowProps> = ({
+  field,
+  value,
+  isEditing,
+  editValue,
+  onEdit,
+  onSave,
+  onCancel,
+  onChangeText,
+  isSaving,
+}) => {
+  if (isEditing) {
+    return (
+      <View>
+        <Text style={styles.label}>{field.label}</Text>
+        <View style={[styles.inputWrap]}>
+          <TextInput
+            value={editValue}
+            onChangeText={onChangeText}
+            style={[styles.editInput, field.multiline && { height: 100, textAlignVertical: 'top' }]}
+            multiline={field.multiline}
+            autoFocus
+            editable={!isSaving}
+            placeholderTextColor={COLORS.slate500}
+          />
+        </View>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: COLORS.gray200 }]}
+            onPress={onCancel}
+            disabled={isSaving}
+          >
+            <Text style={[styles.actionBtnText, { color: COLORS.slate600 }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: COLORS.btnTo }]}
+            onPress={onSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={[styles.actionBtnText, { color: '#fff' }]}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+      <View style={[styles.iconBg, { backgroundColor: field.bg }]}>{field.icon}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.label}>{field.label}</Text>
+        <Text style={styles.value}>{value}</Text>
+      </View>
+      <TouchableOpacity onPress={onEdit} style={styles.editBtn} disabled={isSaving}>
+        <MaterialIcons name="edit" size={20} color={COLORS.slate500} />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   header: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 52 : 28,
+    paddingTop: 40,
     paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -337,13 +536,12 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 6 },
   headerTitle: {
-    fontSize: 20,
-    color: C.slate800,
+    fontSize: 22,
+    color: COLORS.slate800,
     fontFamily: 'Poppins_700Bold',
   },
-
   card: {
-    backgroundColor: C.white,
+    backgroundColor: COLORS.white,
     borderRadius: R.cardRadius,
     padding: 24,
     shadowColor: '#000',
@@ -353,26 +551,20 @@ const styles = StyleSheet.create({
     elevation: 4,
     marginBottom: 24,
   },
-
   avatar: {
-    width: R.avatar,
-    height: R.avatar,
-    borderRadius: R.avatar / 2,
+    width: R.avatarSize,
+    height: R.avatarSize,
+    borderRadius: R.avatarSize / 2,
     backgroundColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 4,
-    borderColor: C.white,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
+    borderColor: COLORS.white,
   },
   avatarImg: {
-    width: '100%',
-    height: '100%',
-    borderRadius: R.avatar / 2,
+    width: R.avatarSize,
+    height: R.avatarSize,
+    borderRadius: R.avatarSize / 2,
   },
   cameraFab: {
     position: 'absolute',
@@ -381,84 +573,84 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: COLORS.indigo500,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: C.indigo500,
-    shadowColor: C.indigo500,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
-
+  name: {
+    marginTop: 18,
+    fontSize: 28,
+    color: COLORS.slate800,
+    fontFamily: 'Poppins_700Bold',
+    textAlign: 'center',
+  },
+  stage: {
+    marginTop: 4,
+    fontSize: 14,
+    color: COLORS.slate500,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+  },
   sectionTitle: {
-    marginTop: 8,
+    marginTop: 22,
     marginBottom: 12,
     paddingHorizontal: 2,
     fontSize: 18,
-    color: C.slate700,
+    color: COLORS.slate700,
     fontFamily: 'Poppins_600SemiBold',
   },
-
-  inputLabel: {
-    fontSize: 14,
-    color: C.slate600,
+  iconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: R.chipRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 12,
+    color: COLORS.slate500,
+    fontFamily: 'Poppins_400Regular',
+  },
+  value: {
+    marginTop: 2,
+    fontSize: 15,
+    color: COLORS.slate700,
     fontFamily: 'Poppins_600SemiBold',
-    marginBottom: 8,
+  },
+  editBtn: {
+    padding: 8,
   },
   inputWrap: {
-    backgroundColor: C.inputBg,
+    backgroundColor: '#f8fafc',
     borderWidth: 2,
-    borderColor: C.inputBorder,
+    borderColor: COLORS.indigo500,
     borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 12,
     overflow: 'hidden',
   },
-  input: {
+  editInput: {
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 16 : 12,
-    color: C.slate700,
+    paddingVertical: 12,
+    color: COLORS.slate700,
     fontSize: 15,
     fontFamily: 'Poppins_500Medium',
     minHeight: 50,
   },
-
-  footerRow: {
-    marginTop: 28,
-    marginBottom: 24,
+  actionRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
-  cancelBtn: {
+  actionBtn: {
     flex: 1,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
   },
-  cancelText: {
-    color: C.slate600,
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  saveBtn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    shadowColor: C.btnTo,
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
-  },
-  saveText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#fff',
+  actionBtnText: {
+    fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
   },
 });

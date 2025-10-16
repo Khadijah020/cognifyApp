@@ -1,19 +1,3 @@
-// PatientDetailsScreen.tsx
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
-import { RootStackParamList } from '../app/App';
-import { usePatient } from '../contexts/PatientContext';
-
 import {
   Poppins_300Light,
   Poppins_400Regular,
@@ -22,10 +6,24 @@ import {
   Poppins_700Bold,
   useFonts,
 } from '@expo-google-fonts/poppins';
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { RootStackParamList } from '../app/App';
+import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientDetails'>;
 
-/* ───────── Design Tokens ───────── */
 const COLORS = {
   bgFrom: '#e0e7ff',
   bgTo: '#f0f4ff',
@@ -56,11 +54,23 @@ const COLORS = {
   btnTo: '#6366f1',
 };
 
-const R = {
-  cardRadius: 20,
-  chipRadius: 12,
-  avatarSize: 128,
-};
+const R = { cardRadius: 20, chipRadius: 12, avatarSize: 128 };
+
+interface PatientData {
+  patient_id: string;
+  email: string;
+  full_name: string;
+  dob: string;
+  address: string;
+  emergency_contact: string;
+  allergies: string;
+  medications: string;
+  conditions: string;
+  dementia_stage: string;
+  likes: string;
+  notes: string;
+  avatar_uri: string;
+}
 
 const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   const [fontsLoaded] = useFonts({
@@ -71,49 +81,102 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
     Poppins_700Bold,
   });
 
-  // Use patient data from context
-  const { patient } = usePatient();
+  const [patient, setPatient] = useState<PatientData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Local toggle for showing/hiding patient sign-in password
-  const [showPassword, setShowPassword] = useState(false);
+  useEffect(() => {
+    const fetchPatient = async () => {
+      setLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const caregiverId = session?.user?.id;
 
-  if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: COLORS.bgTo }} />;
+        if (!caregiverId) {
+          console.warn('No caregiver session found');
+          setLoading(false);
+          return;
+        }
+
+        // First get the patient assigned to this caregiver
+        const { data: patientData, error: patientError } = await supabase
+          .from('patients')
+          .select('id, email, full_name')
+          .eq('caregiver_id', caregiverId)
+          .single();
+
+        if (patientError) {
+          console.error('Error fetching patient:', patientError.message);
+          setLoading(false);
+          return;
+        }
+
+        // Then get the patient details using the patient_id
+        const { data: detailsData, error: detailsError } = await supabase
+          .from('patient_details')
+          .select('*')
+          .eq('patient_id', patientData.id)
+          .single();
+
+        if (detailsError) {
+          console.error('Error fetching patient details:', detailsError.message);
+        }
+
+        // Combine the data
+        const flattenedData: PatientData = {
+          patient_id: patientData.id,
+          email: patientData.email,
+          full_name: patientData.full_name,
+          dob: detailsData?.dob || '',
+          address: detailsData?.address || '',
+          emergency_contact: detailsData?.emergency_contact || '',
+          allergies: detailsData?.allergies || '',
+          medications: detailsData?.medications || '',
+          conditions: detailsData?.conditions || '',
+          dementia_stage: detailsData?.dementia_stage || '',
+          likes: detailsData?.likes || '',
+          notes: detailsData?.notes || '',
+          avatar_uri: detailsData?.avatar_uri || '',
+        };
+        setPatient(flattenedData);
+      } catch (err) {
+        console.error('Unexpected error fetching patient details:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatient();
+  }, []);
+
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: COLORS.bgTo }} />;
+
+  if (loading) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.btnTo} />
+        <Text style={{ marginTop: 12, color: COLORS.slate500 }}>Loading patient details...</Text>
+      </View>
+    );
   }
 
-  // Safe formatting helpers
-  const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
-  const masked = (v?: string) =>
-    v && v.length ? '•'.repeat(Math.min(v.length, 12)) : '—';
+  if (!patient) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ color: COLORS.slate500 }}>No patient details found for this caregiver.</Text>
+      </View>
+    );
+  }
 
-  const patientEmail = safe(patient?.email);
-  // NOTE: only show stored password if you actually keep a temp password in state.
-  // Prefer reset links in production; this is per your request.
-  const patientPasswordRaw = patient?.password as string | undefined;
-  const patientPasswordShown = showPassword
-    ? safe(patientPasswordRaw)
-    : masked(patientPasswordRaw);
+  const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={[COLORS.bgFrom, COLORS.bgTo]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={[COLORS.bgFrom, COLORS.bgTo]} style={StyleSheet.absoluteFill} />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          activeOpacity={0.8}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialIcons
-            name="arrow-back-ios-new"
-            size={20}
-            color={COLORS.slate600}
-          />
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back-ios-new" size={20} color={COLORS.slate600} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Patient Details</Text>
         <View style={{ width: 32 }} />
@@ -128,17 +191,10 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={{ alignItems: 'center' }}>
             <View style={{ position: 'relative' }}>
               <View style={styles.avatar}>
-                {patient?.avatar ? (
-                  <Image
-                    source={{ uri: patient.avatar }}
-                    style={styles.avatarImg}
-                  />
+                {patient?.avatar_uri ? (
+                  <Image source={{ uri: patient.avatar_uri }} style={styles.avatarImg} />
                 ) : (
-                  <MaterialIcons
-                    name="person"
-                    size={64}
-                    color={COLORS.slate400}
-                  />
+                  <MaterialIcons name="person" size={64} color={COLORS.slate400} />
                 )}
               </View>
               <View style={styles.statusDotWrap}>
@@ -146,33 +202,20 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
 
-            <Text style={styles.name}>{safe(patient?.name)}</Text>
-            <Text style={styles.stage}>{safe(patient?.stage)}</Text>
+            <Text style={styles.name}>{safe(patient?.full_name)}</Text>
+            <Text style={styles.stage}>{safe(patient?.dementia_stage)}</Text>
           </View>
         </View>
 
         {/* Personal Information */}
         <Text style={styles.sectionTitle}>Personal Information</Text>
         <View style={[styles.card, { gap: 24 }]}>
-          {/* NEW: Patient sign-in email */}
           <Row
             bg={COLORS.blue100}
             icon={<MaterialIcons name="email" size={22} color={COLORS.blue500} />}
             label="Patient Email"
-            value={patientEmail}
+            value={safe(patient?.email)}
           />
-
-          {/* NEW: Patient sign-in password (masked with eye toggle) */}
-          <RowPassword
-            bg={COLORS.teal100}
-            icon={<MaterialIcons name="lock" size={22} color={COLORS.teal500} />}
-            label="Patient Password"
-            value={patientPasswordShown}
-            onToggle={() => setShowPassword((s) => !s)}
-            toggled={showPassword}
-          />
-
-          {/* Existing fields */}
           <Row
             bg={COLORS.indigo100}
             icon={<MaterialIcons name="cake" size={22} color={COLORS.indigo500} />}
@@ -189,7 +232,7 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
             bg={COLORS.teal100}
             icon={<MaterialIcons name="call" size={22} color={COLORS.teal500} />}
             label="Emergency Contact"
-            value={safe(patient?.emergency)}
+            value={safe(patient?.emergency_contact)}
           />
         </View>
 
@@ -206,7 +249,7 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
             bg={COLORS.blue100}
             icon={<MaterialCommunityIcons name="medical-bag" size={22} color={COLORS.blue500} />}
             label="Current Medications"
-            value={safe(patient?.meds)}
+            value={safe(patient?.medications)}
           />
           <Row
             bg={COLORS.green100}
@@ -219,38 +262,25 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
         {/* Preferences & Notes */}
         <Text style={styles.sectionTitle}>Preferences & Notes</Text>
         <View style={[styles.card]}>
-          <View style={{ flexDirection: 'row' }}>
-            <IconChip bg={COLORS.yellow100}>
-              <MaterialIcons name="lightbulb" size={22} color={COLORS.yellow500} />
-            </IconChip>
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <Text style={styles.itemTitle}>Notes for Care</Text>
-              <Text style={styles.bodyText}>{safe(patient?.notes)}</Text>
-            </View>
-          </View>
-
-          <View
-            style={{ height: 1, backgroundColor: '#eaeef5', marginVertical: 20 }}
+          <Row
+            bg={COLORS.yellow100}
+            icon={<MaterialIcons name="lightbulb" size={22} color={COLORS.yellow500} />}
+            label="Notes for Care"
+            value={safe(patient?.notes)}
           />
-
-          <View style={{ flexDirection: 'row' }}>
-            <IconChip bg={COLORS.pink100}>
-              <MaterialIcons name="thumb-up" size={22} color={COLORS.pink500} />
-            </IconChip>
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <Text style={styles.itemTitle}>Likes & Dislikes</Text>
-              <Text style={styles.bodyText}>{safe(patient?.likes)}</Text>
-            </View>
-          </View>
+          <Row
+            bg={COLORS.pink100}
+            icon={<MaterialIcons name="thumb-up" size={22} color={COLORS.pink500} />}
+            label="Likes & Dislikes"
+            value={safe(patient?.likes)}
+          />
         </View>
 
-        {/* CTA */}
+        {/* Edit Button */}
         <View style={{ marginTop: 36, marginBottom: 24 }}>
           <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => {
-              navigation.navigate('EditPatientDetails', { patient: {} as any });
-            }}
+            onPress={() => navigation.navigate('EditPatientDetails')}
           >
             <LinearGradient
               colors={[COLORS.btnFrom, COLORS.btnTo]}
@@ -268,58 +298,26 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-/* ───────── Small sub-components ───────── */
-const IconChip: React.FC<{ bg: string; children: React.ReactNode }> = ({ bg, children }) => (
-  <View style={[styles.iconBg, { backgroundColor: bg }]}>{children}</View>
-);
-
-const Row: React.FC<{
+const Row = ({
+  bg,
+  icon,
+  label,
+  value,
+}: {
   bg: string;
   icon: React.ReactNode;
   label: string;
   value: string;
-}> = ({ bg, icon, label, value }) => (
-  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-    <IconChip bg={bg}>{icon}</IconChip>
-    <View style={{ marginLeft: 16, flex: 1 }}>
+}) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+    <View style={[styles.iconBg, { backgroundColor: bg }]}>{icon}</View>
+    <View style={{ flex: 1 }}>
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
     </View>
   </View>
 );
 
-// Row with eye toggle on the right (for password)
-const RowPassword: React.FC<{
-  bg: string;
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  toggled: boolean;
-  onToggle: () => void;
-}> = ({ bg, icon, label, value, toggled, onToggle }) => (
-  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-    <IconChip bg={bg}>{icon}</IconChip>
-    <View style={{ marginLeft: 16, flex: 1 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
-    <TouchableOpacity
-      onPress={onToggle}
-      style={styles.eyeBtn}
-      accessibilityRole="button"
-      accessibilityLabel={toggled ? 'Hide password' : 'Show password'}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-    >
-      <MaterialIcons
-        name={toggled ? 'visibility-off' : 'visibility'}
-        size={20}
-        color={COLORS.slate500}
-      />
-    </TouchableOpacity>
-  </View>
-);
-
-/* ───────── Styles ───────── */
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
@@ -336,7 +334,6 @@ const styles = StyleSheet.create({
     color: COLORS.slate800,
     fontFamily: 'Poppins_700Bold',
   },
-
   card: {
     backgroundColor: COLORS.white,
     borderRadius: R.cardRadius,
@@ -347,8 +344,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
   },
-
-  /* Profile */
   avatar: {
     width: R.avatarSize,
     height: R.avatarSize,
@@ -358,11 +353,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 4,
     borderColor: COLORS.white,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
   },
   avatarImg: {
     width: R.avatarSize,
@@ -388,7 +378,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.white,
   },
-
   name: {
     marginTop: 18,
     fontSize: 28,
@@ -403,7 +392,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     textAlign: 'center',
   },
-
   sectionTitle: {
     marginTop: 22,
     marginBottom: 12,
@@ -412,7 +400,6 @@ const styles = StyleSheet.create({
     color: COLORS.slate700,
     fontFamily: 'Poppins_600SemiBold',
   },
-
   iconBg: {
     width: 48,
     height: 48,
@@ -420,7 +407,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   label: {
     fontSize: 12,
     color: COLORS.slate500,
@@ -432,20 +418,6 @@ const styles = StyleSheet.create({
     color: COLORS.slate700,
     fontFamily: 'Poppins_600SemiBold',
   },
-
-  itemTitle: {
-    fontSize: 15,
-    color: COLORS.slate700,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  bodyText: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.slate600,
-    fontFamily: 'Poppins_400Regular',
-  },
-
   cta: {
     borderRadius: 16,
     paddingVertical: 16,
@@ -453,22 +425,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.btnTo,
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
   },
   ctaText: {
     marginLeft: 8,
     fontSize: 16,
     color: '#fff',
     fontFamily: 'Poppins_600SemiBold',
-  },
-
-  eyeBtn: {
-    padding: 6,
-    marginLeft: 8,
   },
 });
 

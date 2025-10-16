@@ -5,12 +5,14 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import AddPatientScreen from "@/screens/AddPatientScreen";
+import ApiConfigurationScreen from "@/screens/ApiConfigurationScreen";
 import ChangeEmailScreen from "@/screens/ChangeEmailScreen";
 import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import EditCaregiverProfileScreen from "@/screens/EditCaregiverProfileScreen";
 import ManageFacesScreen from "@/screens/ManageFacesScreen";
 import PatientDashboardScreen from "@/screens/PatientDashboardScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
+import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
 import { PatientProvider } from "../contexts/PatientContext";
 import AddReminderScreen from "../screens/AddReminderScreen";
 import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
@@ -19,15 +21,13 @@ import LoginScreen from "../screens/LoginScreen";
 import PatientDetailsScreen from "../screens/PatientDetailsScreen";
 import PatientLocationScreen from "../screens/PatientLocationScreen";
 import SignupScreen from "../screens/SignupScreen";
-import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
-import ApiConfigurationScreen from "@/screens/ApiConfigurationScreen";
 
 export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
   CaregiverDashboard: undefined;
   PatientDetails: undefined;
-  EditPatientDetails: { patient: any };
+  EditPatientDetails: undefined;
   PatientLocation: undefined;
   Settings: undefined;
   ManageFaces: undefined;

@@ -70,6 +70,22 @@ const [password, setPassword] = useState('');
   const [careNotes, setCareNotes] = useState('');
   const [likes, setLikes] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [caregiverId, setCaregiverId] = useState<string | null>(null);
+
+  useEffect(() => {
+  const fetchCaregiverId = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error("Error fetching user:", error.message);
+      return;
+    }
+    if (data?.user) {
+      setCaregiverId(data.user.id); // ← store caregiver UID
+      console.log("Caregiver UID set:", data.user.id);
+    }
+  };
+  fetchCaregiverId();
+}, []);
 
   useEffect(() => {
     // ask media permission once
@@ -93,45 +109,53 @@ const [password, setPassword] = useState('');
   const savePatient = async () => {
   const mail = email.trim().toLowerCase();
   if (!fullName.trim() || !mail || !password) {
-    Alert.alert('Missing Info', 'Please enter name, email and password.');
+    Alert.alert('Missing Info', 'Please enter name, email, and password.');
     return;
   }
 
   try {
-    // 1) Create Supabase Auth user
-    const { data, error } = await supabase.auth.signUp({
-      email: mail,
-      password,
-      options: {
-        data: {
-          role: 'patient',
-          fullName,
-          dementiaStage,
-          dob,
-          address,
-          emergencyContact,
-          allergies,
-          medications,
-          conditions,
-          careNotes,
-          likes,
-          avatarUri,
-        },
-      },
-    });
-    if (error) throw error;
+    console.log('== SENDING PATIENT REGISTRATION REQUEST ==');
 
-    const user = data.user;
-    if (!user) throw new Error('Failed to create patient user.');
+    // 1️⃣ Get logged-in caregiver ID (from Supabase session)
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      throw new Error('Could not get caregiver session.');
+    }
 
-    // 2) Insert row into profiles table
-    const { error: pErr } = await supabase.from('profiles').insert({
-      id: user.id,
-      email: mail,
-      role: 'patient',
-      display_name: fullName,
+    const caregiverId = userData.user.id;
+
+    // 2️⃣ Prepare the request body
+    const payload = {
+  caregiver_id: caregiverId,
+  email: mail,
+  password,
+  full_name: fullName,
+  dementia_stage: dementiaStage,
+  dob,
+  address,
+  emergency_contact: emergencyContact,
+  allergies,
+  medications,
+  conditions,
+  notes: careNotes,
+  likes,
+  avatar_uri: avatarUri,
+};
+
+
+    // 3️⃣ Send request to your backend endpoint
+    const response = await fetch('https://e415929b4bf2.ngrok-free.app/register_patient', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
-    if (pErr && pErr.code !== '23505') throw pErr;
+
+    const result = await response.json();
+    console.log('Backend response:', result);
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to add patient.');
+    }
 
     Alert.alert('Success', 'Patient added successfully!', [
       { text: 'OK', onPress: () => navigation.goBack() },
@@ -141,6 +165,9 @@ const [password, setPassword] = useState('');
     Alert.alert('Error', err.message);
   }
 };
+
+
+
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#f0f4ff' }} />;
 

@@ -1,6 +1,9 @@
-// SettingsScreen.tsx
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Platform,
   Pressable,
@@ -10,23 +13,20 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../src/lib/supabase';
 
 import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-/* ───────── Design Tokens (match mock) ───────── */
 const C = {
   bgFrom: '#e0e7ff',
   bgTo: '#f0f4ff',
@@ -50,7 +50,6 @@ const C = {
 
 const GRAD = ['#a5b4fc', '#818cf8'];
 
-/* ───────── Custom Toggle (gradient like mock) ───────── */
 const Toggle = ({
   value,
   onChange,
@@ -66,7 +65,7 @@ const Toggle = ({
 
   const trackBg = x.interpolate({
     inputRange: [0, 1],
-    outputRange: [C.indigo100, GRAD[1]], // start muted, end gradient end color
+    outputRange: [C.indigo100, GRAD[1]],
   });
 
   const thumbTranslate = x.interpolate({
@@ -87,7 +86,6 @@ const Toggle = ({
           borderRadius: 34,
         }}
       />
-      {/* Fake gradient overlay when ON */}
       <Animated.View
         pointerEvents="none"
         style={{
@@ -97,15 +95,13 @@ const Toggle = ({
           right: 0,
           bottom: 0,
           borderRadius: 34,
-          opacity: x, // only show when on
+          opacity: x,
           backgroundColor: 'transparent',
         }}
       >
-        {/* simple two-tone overlay */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: GRAD[0], opacity: 0.45 }]} />
       </Animated.View>
 
-      {/* Thumb */}
       <Animated.View
         pointerEvents="none"
         style={{
@@ -127,6 +123,11 @@ const Toggle = ({
   );
 };
 
+interface PatientInfo {
+  full_name: string;
+  dementia_stage: string;
+}
+
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const { isDark, toggleTheme } = useTheme();
 
@@ -139,9 +140,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const [pushNotifications, setPushNotifications] = useState(true);
   const [smsAlerts, setSmsAlerts] = useState(false);
+  const [patient, setPatient] = useState<PatientInfo | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
+  const [hasPatient, setHasPatient] = useState(false);
 
-  // Success banner (when you later add editable/user actions)
-  const [showBanner, setShowBanner] = useState(false);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerY = useRef(new Animated.Value(-50)).current;
 
@@ -155,6 +157,64 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       } catch {}
     })();
   }, []);
+
+  useEffect(() => {
+    fetchPatientInfo();
+  }, []);
+
+  const fetchPatientInfo = async () => {
+    setPatientLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const caregiverId = session?.user?.id;
+
+      if (!caregiverId) {
+        console.warn('No caregiver session found');
+        setPatientLoading(false);
+        return;
+      }
+
+      // Fetch patient from patients table
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients')
+        .select('id, full_name')
+        .eq('caregiver_id', caregiverId)
+        .single();
+
+      // If patient not found, set hasPatient to false
+      if (patientError) {
+        if (patientError.code === 'PGRST116') {
+          // No rows returned - patient doesn't exist
+          setHasPatient(false);
+        } else {
+          console.error('Error fetching patient:', patientError.message);
+        }
+        setPatientLoading(false);
+        return;
+      }
+
+      // Patient exists, fetch patient details for dementia stage
+      const { data: detailsData, error: detailsError } = await supabase
+        .from('patient_details')
+        .select('dementia_stage')
+        .eq('patient_id', patientData.id)
+        .single();
+
+      if (detailsError) {
+        console.error('Error fetching patient details:', detailsError.message);
+      }
+
+      setPatient({
+        full_name: patientData.full_name,
+        dementia_stage: detailsData?.dementia_stage || 'N/A',
+      });
+      setHasPatient(true);
+    } catch (err) {
+      console.error('Unexpected error fetching patient:', err);
+    } finally {
+      setPatientLoading(false);
+    }
+  };
 
   const persist = async (key: string, val: boolean) => {
     try {
@@ -172,7 +232,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.root}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color={C.slate600} />
@@ -184,7 +243,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 24 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Caregiver profile card */}
         <View style={styles.profileCard} onTouchEnd={() => navigation.navigate('EditCaregiverProfile')}>
           <View style={styles.profileAvatar}>
             <Text style={styles.profileAvatarText}>EC</Text>
@@ -196,33 +254,36 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
         </View>
 
-        {/* Patient Profile */}
         <Text style={styles.sectionTitle}>Patient Profile</Text>
 
-        <View style={styles.rowCard} onTouchEnd={() => navigation.navigate('PatientDetails')}>
-          <View style={[styles.iconBg, { backgroundColor: C.indigo100 }]}>
-            <MaterialIcons name="face" size={22} color={C.indigo500} />
+        {patientLoading ? (
+          <View style={[styles.rowCard, { justifyContent: 'center', alignItems: 'center', minHeight: 80 }]}>
+            <ActivityIndicator size="large" color={C.indigo500} />
           </View>
-          <View style={{ marginLeft: 14, flex: 1 }} >
-            <Text style={styles.rowTitle}>John Doe</Text>
-            <Text style={styles.rowSub}>Active Patient</Text>
+        ) : hasPatient && patient ? (
+          <View style={styles.rowCard} onTouchEnd={() => navigation.navigate('PatientDetails')}>
+            <View style={[styles.iconBg, { backgroundColor: C.indigo100 }]}>
+              <MaterialIcons name="face" size={22} color={C.indigo500} />
+            </View>
+            <View style={{ marginLeft: 14, flex: 1 }}>
+              <Text style={styles.rowTitle}>{patient.full_name}</Text>
+              <Text style={styles.rowSub}>Stage {patient.dementia_stage}</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
           </View>
-          <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
-        </View>
+        ) : (
+          <TouchableOpacity activeOpacity={0.9} style={styles.addPatient} onPress={() => navigation.navigate('AddPatient')}>
+            <View style={[styles.iconBg, { backgroundColor: '#f1f5f9' }]}>
+              <MaterialIcons name="add" size={22} color={C.slate500} />
+            </View>
+            <Text style={styles.addPatientText}>Add New Patient</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity activeOpacity={0.9} style={styles.addPatient} onPress={() => navigation.navigate('AddPatient')}>
-          <View style={[styles.iconBg, { backgroundColor: '#f1f5f9' }]}>
-            <MaterialIcons name="add" size={22} color={C.slate500} />
-          </View>
-          <Text style={styles.addPatientText}>Add New Patient</Text>
-        </TouchableOpacity>
-
-        {/* Account Management */}
         <Text style={styles.sectionTitle}>Account Management</Text>
 
         <View style={styles.groupCard}>
-          <TouchableOpacity activeOpacity={0.8} style={styles.groupRow} onPress={() => navigation.navigate('ChangeEmail')}
->
+          <TouchableOpacity activeOpacity={0.8} style={styles.groupRow} onPress={() => navigation.navigate('ChangeEmail')}>
             <View style={[styles.iconBg, { backgroundColor: C.purple100 }]}>
               <MaterialIcons name="mail" size={20} color={C.purple500} />
             </View>
@@ -241,7 +302,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Preferences */}
         <Text style={styles.sectionTitle}>Preferences</Text>
 
         <View style={styles.groupCard}>
@@ -280,7 +340,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* API Configuration */}
         <Text style={styles.sectionTitle}>API Configuration</Text>
 
         <View style={styles.groupCard}>
@@ -297,14 +356,13 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Logout Button */}
         <TouchableOpacity
           style={styles.logoutBtn}
           activeOpacity={0.85}
           onPress={async () => {
             try {
-              await AsyncStorage.clear(); // Clear stored session data
-              navigation.replace('Login'); // Navigate back to LoginScreen
+              await AsyncStorage.clear();
+              navigation.replace('Login');
             } catch (err) {
               console.error('Error logging out:', err);
             }
@@ -314,31 +372,16 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Optional success banner (hidden by default) */}
-      {showBanner && (
-        <Animated.View
-          style={[
-            styles.banner,
-            { opacity: bannerOpacity, transform: [{ translateY: bannerY }] },
-          ]}
-        >
-          <MaterialIcons name="check-circle" size={18} color="#fff" />
-          <Text style={styles.bannerText}>Saved successfully</Text>
-        </Animated.View>
-      )}
     </View>
   );
 };
 
-/* ───────── Styles ───────── */
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: C.bgTo,
   },
 
-  /* Header */
   header: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'ios' ? 56 : 32,
@@ -347,9 +390,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: C.white,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
     marginRight: 14,
   },
   headerTitle: {
@@ -360,18 +411,27 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
   },
 
-  /* Caregiver card */
   profileCard: {
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   profileAvatar: {
-    width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: C.indigo300,
-    backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: C.indigo300,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileAvatarText: {
     fontFamily: 'Poppins_600SemiBold',
@@ -390,7 +450,6 @@ const styles = StyleSheet.create({
     color: C.slate500,
   },
 
-  /* Section title */
   sectionTitle: {
     marginTop: 26,
     marginBottom: 12,
@@ -400,17 +459,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
 
-  /* Row card (patient) */
   rowCard: {
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   iconBg: {
-    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowTitle: {
     fontFamily: 'Poppins_600SemiBold',
@@ -424,7 +490,6 @@ const styles = StyleSheet.create({
     color: C.slate500,
   },
 
-  /* Add patient (dashed) */
   addPatient: {
     marginTop: 14,
     backgroundColor: C.white,
@@ -435,7 +500,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: C.slate300,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   addPatientText: {
     marginLeft: 14,
@@ -444,12 +513,15 @@ const styles = StyleSheet.create({
     color: C.slate700,
   },
 
-  /* Group card (Account, Preferences) */
   groupCard: {
     backgroundColor: C.white,
     borderRadius: 20,
     paddingVertical: 4,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   groupRow: {
     paddingHorizontal: 20,
@@ -464,9 +536,12 @@ const styles = StyleSheet.create({
     color: C.slate700,
     flex: 1,
   },
-  divider: { height: 1, backgroundColor: '#eef2f7', marginHorizontal: 20 },
+  divider: {
+    height: 1,
+    backgroundColor: '#eef2f7',
+    marginHorizontal: 20,
+  },
 
-  /* Preferences rows */
   prefRow: {
     paddingHorizontal: 20,
     paddingVertical: 18,
@@ -474,35 +549,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  prefLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-
-  /* Banner (optional) */
-  banner: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 36,
-    left: 24,
-    right: 24,
-    backgroundColor: '#22c55e',
-    borderRadius: 12,
-    padding: 14,
+  prefLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+    flex: 1,
   },
-  bannerText: { color: '#fff', marginLeft: 8, fontFamily: 'Poppins_600SemiBold' },
+
   logoutBtn: {
-  marginTop: 30,
-  backgroundColor: C.white,
-  borderRadius: 20,
-  padding: 18,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#000',
-  shadowOpacity: 0.05,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 2,
+    marginTop: 30,
+    backgroundColor: C.white,
+    borderRadius: 20,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   logoutText: {
     marginLeft: 10,
