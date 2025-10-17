@@ -10,6 +10,7 @@ import {
   Dimensions,
   Modal,
   Animated,
+  Alert,
   PanResponder,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,7 +36,12 @@ import Svg, {
 } from "react-native-svg";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../app/App";
+import { useNavigation } from "@react-navigation/native";
+import * as Linking from "expo-linking";
 import HealthDataService from "../services/HealthDataService";
+import FallAlertListener from "../services/FallAlertListener";
+import { supabase } from "../src/lib/supabase";
+
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -72,7 +78,22 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
+  
+const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
+  const [alert, setAlert] = useState<any>(null);
 
+  useEffect(() => {
+    // ✅ Start listening for fall alerts
+    FallAlertListener.startListening(caregiverId, (newAlert: any) => {
+      console.log("📩 Fall alert received:", newAlert);
+      setAlert(newAlert);
+    });
+
+    // ✅ Stop listening when the component unmounts
+    return () => FallAlertListener.stopListening();
+  }, [caregiverId]);
+
+  
   /* -------------------- Modal state -------------------- */
   const [showReminder, setShowReminder] = useState(false);
   const [activeReminder, setActiveReminder] = useState<ReminderData | null>(null);
@@ -160,6 +181,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     return d;
   };
 
+  
+
   return (
     <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -240,7 +263,113 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
           <SectionTitle title="Health Metrics" />
           <View style={{ paddingHorizontal: 24 }}>
             {/* Daily Activity */}
-            <CardBox>
+      <CardBox>
+
+
+      
+      {/* 🆘 FALL ALERT POPUP */}
+      <Modal visible={!!alert} transparent animationType="fade">
+  <BlurView intensity={40} tint="dark" style={styles.puoverlay}>
+    <View style={styles.pucentered}>
+      <View style={styles.pucardContainer}>
+        {/* Close Button */}
+        <TouchableOpacity style={styles.pucloseButton} onPress={() => setAlert(null)}>
+          <MaterialIcons name="close" size={30} color="rgba(255,255,255,0.8)" />
+        </TouchableOpacity>
+
+        {/* Gradient Card */}
+        <LinearGradient
+          colors={["#f87171", "#f472b6"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.pucard}
+        >
+          {/* Main Icon */}
+          <View style={styles.puiconWrapper}>
+            <MaterialIcons name="personal-injury" size={50} color="#fff" />
+          </View>
+
+          {/* Title */}
+          <Text style={styles.pucardTitle}>FALL DETECTED</Text>
+
+          {/* Info Text */}
+          <Text style={styles.pualertText}>
+            {alert?.patient_name || "Patient"} may have fallen.
+          </Text>
+
+          {/* Timestamp */}
+          <Text style={styles.putimestamp}>
+            {alert?.created_at
+              ? `Timestamp: ${new Date(alert.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}, ${new Date(alert.created_at).toLocaleDateString()}`
+              : "Timestamp: Just now"}
+          </Text>
+
+          {/* Buttons */}
+          <View style={styles.pubuttonGroup}>
+            {/* ✅ Navigate to Patient Location */}
+            <TouchableOpacity
+              style={styles.puprimaryButton}
+              onPress={() => {
+                setAlert(null); // close popup
+                navigation.navigate("PatientLocation");
+              }}
+            >
+              <MaterialIcons name="location-on" size={22} color="#e11d48" />
+              <Text style={styles.puprimaryText}>Check Location</Text>
+            </TouchableOpacity>
+
+            {/* ✅ Call the Patient */}
+            <TouchableOpacity
+              style={styles.pusecondaryButton}
+              onPress={async () => {
+                try {
+                  if (!alert?.patient_id) {
+                    Alert.alert("Error", "Patient ID not found.");
+                    return;
+                  }
+
+                  // Fetch phone number from Supabase
+                  const { data, error } = await supabase
+                    .from("patients")
+                    .select("phone_number, full_name")
+                    .eq("id", alert.patient_id)
+                    .single();
+
+                  if (error) {
+                    console.error("Supabase error:", error);
+                    Alert.alert("Error", "Failed to fetch patient info.");
+                    return;
+                  }
+
+                  const phoneNumber = data?.phone_number;
+                  if (!phoneNumber) {
+                    Alert.alert("Missing Info", "Phone number not available for this patient.");
+                    return;
+                  }
+
+                  // ✅ Open phone dialer
+                  Linking.openURL(`tel:${phoneNumber}`);
+                } catch (err) {
+                  console.error("Error calling patient:", err);
+                  Alert.alert("Error", "Something went wrong.");
+                }
+              }}
+            >
+              <MaterialIcons name="call" size={20} color="#fff" />
+              <Text style={styles.pusecondaryText}>
+                Call {alert?.patient_name || "Patient"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </View>
+    </View>
+  </BlurView>
+</Modal>
+
               <View style={styles.rowBetween}>
                 <View>
                   <Text style={styles.cardTitle}>Daily Activity</Text>
@@ -932,6 +1061,99 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#6366F1",
   },
+  puoverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 16,
+},
+pucentered: {
+  width: "100%",
+  maxWidth: 400,
+},
+pucardContainer: {
+  position: "relative",
+},
+pucloseButton: {
+  position: "absolute",
+  top: 12,
+  left: 12,
+  zIndex: 10,
+},
+pucard: {
+  borderRadius: 28,
+  paddingVertical: 40,
+  paddingHorizontal: 24,
+  alignItems: "center",
+  shadowColor: "#f472b6",
+  shadowOffset: { width: 0, height: 12 },
+  shadowOpacity: 0.5,
+  shadowRadius: 25,
+  elevation: 10,
+},
+puiconWrapper: {
+  backgroundColor: "rgba(255,255,255,0.3)",
+  width: 90,
+  height: 90,
+  borderRadius: 45,
+  justifyContent: "center",
+  alignItems: "center",
+  marginBottom: 16,
+},
+pucardTitle: {
+  fontSize: 24,
+  fontWeight: "800",
+  color: "#fff",
+  marginBottom: 8,
+},
+pualertText: {
+  fontSize: 18,
+  color: "#fff",
+  textAlign: "center",
+  marginBottom: 4,
+  fontWeight: "500",
+},
+putimestamp: {
+  fontSize: 13,
+  color: "rgba(255,255,255,0.8)",
+  textAlign: "center",
+  marginBottom: 28,
+},
+pubuttonGroup: {
+  width: "100%",
+  gap: 10,
+},
+puprimaryButton: {
+  backgroundColor: "#fff",
+  borderRadius: 20,
+  paddingVertical: 14,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+},
+puprimaryText: {
+  color: "#e11d48",
+  fontSize: 17,
+  fontWeight: "700",
+},
+pusecondaryButton: {
+  borderWidth: 2,
+  borderColor: "rgba(255,255,255,0.8)",
+  borderRadius: 20,
+  paddingVertical: 12,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+},
+pusecondaryText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "600",
+},
+
 });
 
 const med = StyleSheet.create({
@@ -946,6 +1168,7 @@ const med = StyleSheet.create({
     fontSize: 14,
     color: "#94a3b8",
   },
+
 });
 
 /* -------------------- Modal-specific styles -------------------- */
