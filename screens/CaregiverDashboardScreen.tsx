@@ -1,39 +1,39 @@
-import React, { useRef, useState, useEffect } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  Animated,
-  PanResponder,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
-import AppLoading from "expo-app-loading";
-import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from "@expo-google-fonts/poppins";
-import { MaterialIcons, Feather } from "@expo/vector-icons";
+import { Feather, MaterialIcons } from "@expo/vector-icons";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import AppLoading from "expo-app-loading";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Svg, {
-  Rect,
   Circle,
   Defs,
-  LinearGradient as SvgGradient,
+  Path,
+  Rect,
   Stop,
+  LinearGradient as SvgGradient,
   Line as SvgLine,
   Text as SvgText,
-  Path,
 } from "react-native-svg";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../app/App";
 import HealthDataService from "../services/HealthDataService";
 

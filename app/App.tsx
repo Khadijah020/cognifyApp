@@ -21,6 +21,7 @@ import LoginScreen from "../screens/LoginScreen";
 import PatientDetailsScreen from "../screens/PatientDetailsScreen";
 import PatientLocationScreen from "../screens/PatientLocationScreen";
 import SignupScreen from "../screens/SignupScreen";
+import { supabase } from "../src/lib/supabase";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -41,9 +42,9 @@ export type RootStackParamList = {
   AddReminder: {
     prefill?: {
       title?: string;
-      date?: Date;            // or string if you prefer
-      timeText?: string;      // e.g. "05:12 PM"
-      hour?: number;          // optional if you want to preseed the wheel
+      date?: Date;
+      timeText?: string;
+      hour?: number;
       minute?: number;
       period?: 'AM' | 'PM';
     };
@@ -54,11 +55,23 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
-
-  useEffect(() => {
-    const checkLogin = async () => {
-      try {
+// In App.tsx
+useEffect(() => {
+  
+  const checkLogin = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+            
+      if (error) {
+        console.log('[App.tsx] Session check error:', error.message);
+        setInitialRoute("Login");
+        return;
+      }
+      
+      if (session && session.access_token) {
         const role = await AsyncStorage.getItem("role");
+        
+        
         if (role === "patient") {
           setInitialRoute("PatientDashboard");
         } else if (role === "caregiver") {
@@ -66,12 +79,16 @@ export default function App() {
         } else {
           setInitialRoute("Login");
         }
-      } catch {
+      } else {
         setInitialRoute("Login");
       }
-    };
-    checkLogin();
-  }, []);
+    } catch (error: any) {
+      setInitialRoute("Login");
+    }
+  };
+
+  checkLogin();
+}, []);
 
   if (!initialRoute) {
     // While checking AsyncStorage, show splash
