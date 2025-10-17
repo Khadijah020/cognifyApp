@@ -17,6 +17,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HealthDataService from '../services/HealthDataService';
+import FallDetectionService from "../services/FallDetectionService";
 
 
 import {
@@ -67,6 +68,13 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [steps, setSteps] = useState(0);
   const [activeMinutes, setActiveMinutes] = useState(0);
   const [showReminder, setShowReminder] = useState(false);
+  const patientId = "9a6f5ccd-a229-4c00-8bc0-00357d8dc71c"; // Replace with real ID from Supabase auth or context
+  const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411";
+
+  useEffect(() => {
+    FallDetectionService.start(patientId, caregiverId);
+    return () => FallDetectionService.stop();
+  }, []);
 
   useEffect(() => {
     loadHealthData();
