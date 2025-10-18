@@ -28,6 +28,9 @@ import {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VoiceAssistant'>;
 
+// 🔑 Replace with your Google AI Studio API key
+const GOOGLE_AI_API_KEY = 'AIzaSyAWQ0-UPGc80E-iVYBIk4FtVsC2ukQ5yZY';
+
 const C = {
   overlayFrom: 'rgba(96,165,250,0.9)',
   overlayTo: 'rgba(167,139,250,0.9)',
@@ -48,8 +51,12 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioUri, setAudioUri] = useState<string>('');
   const [transcript, setTranscript] = useState<string>('');
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const ring1 = useRef(new Animated.Value(0)).current;
   const ring2 = useRef(new Animated.Value(0)).current;
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -61,6 +68,160 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
     loop.start();
     return () => loop.stop();
   }, [ring1, ring2]);
+
+  // Poll the backend for local model output
+  const pollForLocalModelOutput = async () => {
+    try {
+      const endpoint = ApiService.getApiEndpoint('/get_local_Model_output');
+      console.log('🔍 Polling for local model output:', endpoint);
+      
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('❌ Polling error:', response.status);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('📥 Polling response:', result);
+
+      if (result.status === 'success' && result.has_output && result.data) {
+        console.log('✅ Received local model output:', result.data);
+        setStatusMessage('Processing response...');
+        
+        // Keep polling - don't stop! This allows multiple Q&A interactions
+        
+        // Extract and clean the answer from the output
+        const rawOutput = result.data.output || '';
+        console.log('📝 Raw output:', rawOutput);
+        
+        // Extract the answer portion (between "**Answer:**" and "**Context used:**")
+        const answerMatch = rawOutput.match(/\*\*Answer:\*\*\s*(.*?)\s*(?:\*\*Context used:\*\*|$)/s);
+        let cleanedAnswer = '';
+        
+        if (answerMatch && answerMatch[1]) {
+          cleanedAnswer = answerMatch[1].trim();
+        } else {
+          // Fallback: use the entire output if pattern not found
+          cleanedAnswer = rawOutput;
+        }
+        
+        // Remove all escape characters like \n, \t, etc.
+        cleanedAnswer = cleanedAnswer.replace(/\\n/g, ' ').replace(/\\t/g, ' ').replace(/\\r/g, ' ');
+        
+        // Clean up multiple spaces
+        cleanedAnswer = cleanedAnswer.replace(/\s+/g, ' ').trim();
+        
+        console.log('🎯 Cleaned answer to send to TTS:', cleanedAnswer);
+        
+        // Generate and play TTS with the cleaned answer
+        if (cleanedAnswer) {
+          await generateAndPlayTTS(cleanedAnswer);
+        } else {
+          console.error('❌ No valid answer extracted from output');
+          setStatusMessage('No response to play');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error polling for output:', error);
+    }
+  };
+
+  // Generate TTS using expo-speech and play it
+  const generateAndPlayTTS = async (text: string) => {
+    try {
+      setStatusMessage('Speaking response...');
+      setIsPlayingAudio(true);
+      console.log('🎵 Speaking text:', text);
+
+      // CRITICAL: Set audio mode to use SPEAKER before speaking
+      // This ensures audio plays through speaker, not earpiece
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false, // Force speaker on Android
+        interruptionModeIOS: 2, // Do not mix with others
+        interruptionModeAndroid: 1, // Do not mix
+      });
+
+      // Get available voices to find the best female voice
+      const voices = await Speech.getAvailableVoicesAsync();
+      console.log('🎤 Available voices:', voices.length);
+      
+      // Find natural female voices (prefer enhanced/premium quality)
+      // iOS: Look for Samantha, Nicky, or Fiona (natural female voices)
+      // Android: Look for female voices with quality descriptors
+      const femaleVoice = voices.find(v => 
+        // iOS voices
+        v.identifier.includes('Samantha') || 
+        v.identifier.includes('Nicky') ||
+        v.identifier.includes('Fiona') ||
+        v.identifier.includes('Karen') ||
+        // Android voices
+        (v.language.startsWith('en') && v.name.toLowerCase().includes('female'))
+      );
+
+      console.log('🎵 Selected voice:', femaleVoice?.identifier || 'default');
+      console.log('🔊 Audio will play through SPEAKER');
+
+      // Use expo-speech to speak the text with natural female voice
+      await Speech.speak(text, {
+        language: 'en-US',
+        pitch: 1.15, // Slightly higher pitch for more natural female voice
+        rate: 0.85, // Slower for better clarity and more natural pace
+        voice: femaleVoice?.identifier, // Use the best female voice found
+        _voiceIndex: undefined, // Let the system choose based on voice identifier
+        onDone: () => {
+          console.log('✅ Speech finished');
+          setIsPlayingAudio(false);
+          setStatusMessage('');
+        },
+        onStopped: () => {
+          console.log('⏹️ Speech stopped');
+          setIsPlayingAudio(false);
+          setStatusMessage('');
+        },
+        onError: (error) => {
+          console.error('❌ Speech error:', error);
+          setIsPlayingAudio(false);
+          setStatusMessage('Failed to speak');
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error generating TTS:', error);
+      setStatusMessage('Failed to generate speech');
+      setIsPlayingAudio(false);
+    }
+  };
+
+
+
+  // Start polling when screen loads
+  useEffect(() => {
+    // Start polling every 2 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      pollForLocalModelOutput();
+    }, 2000);
+
+    // Initial poll
+    pollForLocalModelOutput();
+
+    return () => {
+      // Clean up polling on unmount
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Clean up ALL audio recordings from cache on app start
   const cleanupAllRecordings = async () => {
@@ -175,6 +336,8 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       if (audioUri) {
         FileSystemLegacy.deleteAsync(audioUri, { idempotent: true }).catch(console.error);
       }
+      // Stop speech
+      Speech.stop();
     };
   }, [recording, audioUri]);
 
@@ -261,7 +424,6 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       Alert.alert(
         'Error',
         'Failed to process audio. Make sure your ngrok URL is correct in ApiService.ts',
-        'Failed to process audio. Make sure your ngrok URL is correct in ApiService.ts',
         [{ text: 'OK' }]
       );
     }
@@ -293,12 +455,13 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       <LinearGradient colors={[C.overlayFrom, C.overlayTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.overlay}>
         <View style={styles.centerTop}>
           <Text style={[styles.title, { fontFamily: 'Poppins_700Bold' }]}>
-            {isRecording ? ' Recording...' : 'How can I help you?'}
+            {isRecording ? 'Recording...' : isPlayingAudio ? 'Playing Response...' : 'How can I help you?'}
           </Text>
           <Text style={[styles.subtitle, { fontFamily: 'Poppins_400Regular' }]}>
-            {isRecording ? 'Tap stop when finished' : 'Tap mic to record'}
+            {isRecording ? 'Tap stop when finished' : isPlayingAudio ? 'Listening to assistant' : 'Tap mic to record'}
           </Text>
-          {audioUri ? <Text style={[styles.statusText, { fontFamily: 'Poppins_500Medium' }]}> Audio recorded</Text> : null}
+          {statusMessage ? <Text style={[styles.statusText, { fontFamily: 'Poppins_500Medium' }]}>{statusMessage}</Text> : null}
+          {audioUri && !statusMessage ? <Text style={[styles.statusText, { fontFamily: 'Poppins_500Medium' }]}>Audio recorded</Text> : null}
         </View>
 
         <View style={styles.micWrap}>
@@ -315,9 +478,23 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
             }]}
           />
 
-          <TouchableOpacity activeOpacity={0.9} onPress={isRecording ? stopRecording : startRecording} style={styles.micBtnShadow}>
-            <LinearGradient colors={isRecording ? ['#ef4444', '#dc2626'] : ['#60a5fa', '#a78bfa']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.micBtn}>
-              <MaterialIcons name={isRecording ? "stop" : "mic"} size={64} color="#fff" />
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={isRecording ? stopRecording : startRecording} 
+            style={styles.micBtnShadow}
+            disabled={isPlayingAudio}
+          >
+            <LinearGradient 
+              colors={isPlayingAudio ? ['#10b981', '#059669'] : isRecording ? ['#ef4444', '#dc2626'] : ['#60a5fa', '#a78bfa']} 
+              start={{ x: 0, y: 0 }} 
+              end={{ x: 1, y: 1 }} 
+              style={styles.micBtn}
+            >
+              <MaterialIcons 
+                name={isPlayingAudio ? "volume-up" : isRecording ? "stop" : "mic"} 
+                size={64} 
+                color="#fff" 
+              />
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -326,10 +503,18 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
           <TouchableOpacity 
             activeOpacity={0.9} 
             onPress={async () => { 
+              // Stop recording
               if (recording) recording.stopAndUnloadAsync().catch(console.error);
               // Delete audio file when canceling
               if (audioUri) {
                 FileSystemLegacy.deleteAsync(audioUri, { idempotent: true }).catch(console.error);
+              }
+              // Stop speech
+              Speech.stop();
+              // Stop polling
+              if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
               }
               navigation.goBack(); 
             }} 

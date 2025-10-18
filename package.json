@@ -19,7 +19,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.26",
-    "@supabase/supabase-js": "^2.58.0",
+    "@supabase/supabase-js": "^2.75.1",
     "expo": "~54.0.10",
     "expo-app-loading": "^2.1.1",
     "expo-av": "~15.0.0",
