@@ -1,7 +1,20 @@
 // EditCaregiverProfileScreen.tsx
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  useFonts,
+} from '@expo-google-fonts/poppins';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,26 +23,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
-
-import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
+import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditCaregiverProfile'>;
-
-const STORAGE_KEY = 'caregiver_profile';
 
 export default function EditCaregiverProfileScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -39,10 +37,13 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
     Poppins_700Bold,
   });
 
-  const [fullName, setFullName] = useState('Emily Carter');
-  const [email, setEmail] = useState('emily.carter@example.com');
-  const [phone, setPhone] = useState('+1 (123) 456-7890');
-  const [address, setAddress] = useState('123 Maple Street, Anytown');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [caregiverId, setCaregiverId] = useState<string | null>(null);
+
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(
     'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100'
   );
@@ -50,16 +51,37 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const p = JSON.parse(stored);
-          setFullName(p.fullName ?? fullName);
-          setEmail(p.email ?? email);
-          setPhone(p.phone ?? phone);
-          setAddress(p.address ?? address);
-          setAvatarUri(p.avatarUri ?? avatarUri);
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          Alert.alert('Error', 'Unable to fetch user information.');
+          setLoading(false);
+          return;
         }
-      } catch {}
+
+        setCaregiverId(user.id);
+
+        const { data, error } = await supabase
+          .from('caregivers')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Fetch error:', error);
+          Alert.alert('Error', 'Failed to load profile.');
+          setLoading(false);
+          return;
+        }
+
+        setFullName(data.full_name || '');
+        setEmail(data.email || '');
+        setPhone(data.phone || '');
+        setLoading(false);
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        Alert.alert('Error', 'An unexpected error occurred.');
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -69,32 +91,65 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
       Alert.alert('Permission Needed', 'Please allow photo access to change your avatar.');
       return;
     }
+
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.9,
     });
-    if (!res.canceled && res.assets?.[0]?.uri) setAvatarUri(res.assets[0].uri);
+
+    if (!res.canceled) {
+      Alert.alert('Image Selected', 'Preview not saved since avatar field is disabled.');
+    }
   };
 
   const save = async () => {
-    if (!fullName.trim()) return Alert.alert('Full Name required', 'Please enter your full name.');
+    if (!fullName.trim()) {
+      return Alert.alert('Full Name required', 'Please enter your full name.');
+    }
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!emailOk) return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    if (!emailOk) {
+      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    }
+    if (!caregiverId) {
+      return Alert.alert('Error', 'Unable to determine user ID.');
+    }
 
-    const payload = { fullName: fullName.trim(), email: email.trim(), phone: phone.trim(), address: address.trim(), avatarUri };
+    setSaving(true);
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      Alert.alert('Saved', 'Profile updated successfully.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
-    } catch {
+      const { error } = await supabase
+        .from('caregivers')
+        .update({
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+        })
+        .eq('id', caregiverId);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to save profile: ' + error.message);
+        setSaving(false);
+        return;
+      }
+
+      Alert.alert('Success', 'Profile updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (err) {
+      console.error('Save error:', err);
       Alert.alert('Error', 'Failed to save your profile. Please try again.');
+      setSaving(false);
     }
   };
 
   const S = styles;
-
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#e9efff' }} />;
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={[S.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#6366f1" />
+      </View>
+    );
+  }
 
   return (
     <View style={S.container}>
@@ -106,22 +161,34 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
         <Text style={S.headerTitle}>Edit Profile</Text>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Avatar */}
-          <View style={{ alignItems: 'center', marginTop: 8 }}>
-            <View style={S.avatarWrap}>
-              <Image
-                source={{
-                  uri:
-                    avatarUri ??
-                    'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100',
-                }}
-                style={S.avatar}
-              />
-              <TouchableOpacity activeOpacity={0.9} style={S.editBadge} onPress={pickImage}>
-                <MaterialIcons name="edit" size={16} color="#fff" />
-              </TouchableOpacity>
+          <View style={{ alignItems: 'center', marginTop: 24 }}>
+            <View style={S.avatarOuter}>
+              <View style={S.avatarInner}>
+                <Image
+                  source={{
+                    uri:
+                      avatarUri ??
+                      'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100',
+                  }}
+                  style={S.avatar}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={S.editBadge}
+                  onPress={pickImage}
+                >
+                  <MaterialIcons name="edit" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -135,19 +202,18 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
                 onChangeText={setFullName}
                 placeholder="Full Name"
                 placeholderTextColor="#94a3b8"
+                editable={!saving}
               />
             </View>
 
             <View>
-              <Text style={S.label}>Email Address</Text>
+              <Text style={S.label}>Email Address (Read-only)</Text>
               <TextInput
-                style={S.input}
-                autoCapitalize="none"
-                keyboardType="email-address"
+                style={[S.input, { color: '#94a3b8' }]}
                 value={email}
-                onChangeText={setEmail}
                 placeholder="email@example.com"
                 placeholderTextColor="#94a3b8"
+                editable={false}
               />
             </View>
 
@@ -160,25 +226,25 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
                 onChangeText={setPhone}
                 placeholder="+1 (000) 000-0000"
                 placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            <View>
-              <Text style={S.label}>Address</Text>
-              <TextInput
-                style={S.input}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="Street, City"
-                placeholderTextColor="#94a3b8"
+                editable={!saving}
               />
             </View>
           </View>
 
           {/* Save button */}
-          <TouchableOpacity activeOpacity={0.9} style={{ marginTop: 36 }} onPress={save}>
-            <LinearGradient colors={['#a5b4fc', '#6366f1']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={S.saveBtn}>
-              <Text style={S.saveText}>Save Changes</Text>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={{ marginTop: 40 }}
+            onPress={save}
+            disabled={saving}
+          >
+            <LinearGradient
+              colors={['#a5b4fc', '#6366f1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[S.saveBtn, saving && { opacity: 0.6 }]}
+            >
+              <Text style={S.saveText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>
@@ -186,11 +252,9 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // EXACT soft indigo gradient look (static)
     backgroundColor: '#f0f4ff',
   },
   header: {
@@ -220,9 +284,8 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginLeft: 37,
   },
-
   avatarWrap: {
-    width: 112, // w-28
+    width: 112,
     height: 112,
     borderRadius: 56,
     borderWidth: 4,
@@ -243,12 +306,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: '#6366f1',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  // Gradient for edit badge
-  editBadgeBg: {},
   label: {
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 14,
@@ -282,5 +344,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     fontSize: 18,
     color: '#fff',
+  },
+  avatarOuter: {
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  avatarInner: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    overflow: 'hidden',
   },
 });
