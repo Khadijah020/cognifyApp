@@ -1,22 +1,5 @@
+
 import {
-  SafeAreaView,
-  ScrollView,
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  Animated,
-  Alert,
-  PanResponder,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
-import AppLoading from "expo-app-loading";
-import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
@@ -28,8 +11,10 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppLoading from "expo-app-loading";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -53,10 +38,8 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
-import { useNavigation } from "@react-navigation/native";
-import * as Linking from "expo-linking";
-import HealthDataService from "../services/HealthDataService";
 import FallAlertListener from "../services/FallAlertListener";
+import HealthDataService from "../services/HealthDataService";
 import { supabase } from "../src/lib/supabase";
 
 
