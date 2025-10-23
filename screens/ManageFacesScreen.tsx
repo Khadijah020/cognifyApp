@@ -1,6 +1,13 @@
-// ManageFacesScreen.tsx
-import React, { useEffect, useRef, useState } from 'react';
+// ManageFacesScreen.tsx - Fixed version
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { readAsStringAsync } from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -14,19 +21,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
 
 import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManageFaces'>;
@@ -46,45 +48,111 @@ type NewPersonData = {
 };
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-
-const defaultFaces: RecognizedFace[] = [
-  {
-    id: '1',
-    name: 'Jane Doe',
-    relationship: 'Daughter',
-    imageUri:
-      'https://images.unsplash.com/photo-1494790108755-2616b612b739?w=150&h=150&fit=crop&crop=face',
-    dateAdded: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Michael Smith',
-    relationship: 'Grandson',
-    imageUri:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-    dateAdded: '2024-02-20',
-  },
-  {
-    id: '3',
-    name: 'Dr. Emily White',
-    relationship: 'Doctor',
-    imageUri:
-      'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&h=150&fit=crop&crop=face',
-    dateAdded: '2024-03-10',
-  },
-  {
-    id: '4',
-    name: 'David Chen',
-    relationship: 'Neighbor',
-    imageUri:
-      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    dateAdded: '2024-03-25',
-  },
-];
-
+const API_URL = 'https://5ed01ba0a4db.ngrok-free.app';
 const INDIGO = '#6366f1';
 const BG_FROM = '#f0f4ff';
-const BG_TO = '#e0e7ff';
+
+// Helper function to convert image to base64
+const imageToBase64 = async (uri: string): Promise<string> => {
+  try {
+    const base64 = await readAsStringAsync(uri, {
+      encoding: 'base64',
+    });
+    return base64; // Return just the base64 string, not the data URL
+  } catch (error) {
+    console.error('Error converting image:', error);
+    throw error;
+  }
+};
+
+// Separate PersonModal component to prevent re-renders
+const PersonModal = React.memo(({
+  visible,
+  onClose,
+  onSave,
+  title,
+  newPersonData,
+  setNewPersonData,
+  pickImage,
+  relationships,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  title: string;
+  newPersonData: NewPersonData;
+  setNewPersonData: (data: NewPersonData) => void;
+  pickImage: () => Promise<void>;
+  relationships: string[];
+}) => (
+  <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <View style={s.modalOverlay}>
+      <View style={s.modalCard}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialIcons name="close" size={22} color="#64748b" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity style={s.photoTap} onPress={pickImage} activeOpacity={0.8}>
+            {newPersonData.imageUri ? (
+              <Image source={{ uri: newPersonData.imageUri }} style={s.photo} />
+            ) : (
+              <View style={s.photoPlaceholder}>
+                <MaterialIcons name="add-a-photo" size={34} color={INDIGO} />
+                <Text style={s.photoText}>Tap to add photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={s.field}>
+            <Text style={s.label}>Name *</Text>
+            <TextInput
+              style={s.input}
+              value={newPersonData.name}
+              onChangeText={(t) => setNewPersonData({ ...newPersonData, name: t })}
+              placeholder="Enter full name"
+              placeholderTextColor="#94a3b8"
+            />
+          </View>
+
+          <View style={s.field}>
+            <Text style={s.label}>Relationship *</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 8 }}
+            >
+              {relationships.map((r) => {
+                const active = newPersonData.relationship === r;
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    style={[s.chip, active && s.chipActive]}
+                    onPress={() => setNewPersonData({ ...newPersonData, relationship: r })}
+                  >
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{r}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </ScrollView>
+
+        <View style={s.modalActions}>
+          <TouchableOpacity style={s.cancel} onPress={onClose}>
+            <Text style={s.cancelTxt}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.save} onPress={onSave}>
+            <Text style={s.saveTxt}>Save</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+));
 
 export default function ManageFacesScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -103,25 +171,52 @@ export default function ManageFacesScreen({ navigation }: Props) {
     relationship: '',
     imageUri: null,
   });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(false);
 
-  const relationships = [
-    'Family Member',
-    'Daughter',
-    'Son',
-    'Grandson',
-    'Granddaughter',
-    'Doctor',
-    'Nurse',
-    'Caregiver',
-    'Friend',
-    'Neighbor',
-    'Other',
-  ];
+  const relationships = useMemo(
+    () => [
+      'Family Member',
+      'Daughter',
+      'Son',
+      'Grandson',
+      'Granddaughter',
+      'Doctor',
+      'Nurse',
+      'Caregiver',
+      'Friend',
+      'Neighbor',
+      'Other',
+    ],
+    []
+  );
 
   useEffect(() => {
     requestPermissions();
     loadFaces();
+    checkBackendConnection();
   }, []);
+
+  const checkBackendConnection = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${API_URL}/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const data = await response.json();
+      setBackendConnected(data.status === 'healthy');
+      console.log('✅ Backend connected:', data);
+    } catch (error) {
+      setBackendConnected(false);
+      console.log('⚠️ Backend not connected:', error);
+    }
+  };
 
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -136,11 +231,10 @@ export default function ManageFacesScreen({ navigation }: Props) {
       if (stored) {
         setRecognizedFaces(JSON.parse(stored));
       } else {
-        setRecognizedFaces(defaultFaces);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(defaultFaces));
+        setRecognizedFaces([]);
       }
     } catch {
-      setRecognizedFaces(defaultFaces);
+      setRecognizedFaces([]);
     }
   };
 
@@ -150,7 +244,80 @@ export default function ManageFacesScreen({ navigation }: Props) {
     } catch {}
   };
 
-  const pickImage = async () => {
+  const syncWithBackend = async (face: RecognizedFace) => {
+    try {
+      console.log('🔄 Starting sync for:', face.name);
+      console.log('📸 Image URI:', face.imageUri);
+      
+      const imageBase64 = await imageToBase64(face.imageUri);
+      console.log('✅ Image converted to base64, length:', imageBase64.length);
+      console.log('📝 First 100 chars of base64:', imageBase64.substring(0, 100));
+
+      const payload = {
+        id: face.id,
+        name: face.name,
+        relationship: face.relationship,
+        image: imageBase64,
+      };
+
+      console.log('📤 Sending payload to:', `${API_URL}/register_face`);
+      console.log('📦 Payload keys:', Object.keys(payload));
+      console.log('📊 Payload sizes - id:', payload.id.length, 'name:', payload.name.length, 'relationship:', payload.relationship.length, 'image:', payload.image.length);
+
+      const response = await fetch(`${API_URL}/register_face`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('✅ Response received - Status:', response.status);
+      
+      const data = await response.json();
+      console.log('📥 Backend response:', JSON.stringify(data, null, 2));
+
+      if (response.ok && (data.success === true || data.status === 'success')) {
+        console.log('✅ Synced to backend:', face.name);
+        return true;
+      } else {
+        console.error('❌ Sync failed - Detail:', data.detail || JSON.stringify(data));
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Sync error:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'N/A');
+      return false;
+    }
+  };
+
+  const syncAllFacesToBackend = async () => {
+    if (!backendConnected) {
+      Alert.alert('Backend Not Connected', 'Please make sure the Flask server is running.');
+      return;
+    }
+
+    setIsSyncing(true);
+    let successCount = 0;
+
+    try {
+      for (const face of recognizedFaces) {
+        const success = await syncWithBackend(face);
+        if (success) successCount++;
+      }
+
+      Alert.alert(
+        'Sync Complete',
+        `Successfully synced ${successCount} out of ${recognizedFaces.length} faces.`
+      );
+    } catch (error) {
+      Alert.alert('Sync Error', 'Failed to sync faces with backend.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const pickImage = useCallback(async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -164,7 +331,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
     } catch {
       Alert.alert('Error', 'Failed to pick image.');
     }
-  };
+  }, []);
 
   const handleAddPerson = async () => {
     if (!newPersonData.name.trim()) return Alert.alert('Error', 'Please enter a name.');
@@ -184,6 +351,15 @@ export default function ManageFacesScreen({ navigation }: Props) {
     setRecognizedFaces(updated);
     await saveFaces(updated);
 
+    if (backendConnected) {
+      const synced = await syncWithBackend(newFace);
+      if (synced) {
+        Alert.alert('Success', `${newFace.name} added and synced to backend!`);
+      } else {
+        Alert.alert('Warning', `${newFace.name} saved locally but not synced to backend.`);
+      }
+    }
+
     setNewPersonData({ name: '', relationship: '', imageUri: null });
     setAddPersonVisible(false);
   };
@@ -193,6 +369,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
     if (!newPersonData.name.trim() || !newPersonData.relationship.trim()) {
       return Alert.alert('Error', 'Please fill in all fields.');
     }
+
     const updated = recognizedFaces.map((f) =>
       f.id === selectedFace.id
         ? {
@@ -203,8 +380,15 @@ export default function ManageFacesScreen({ navigation }: Props) {
           }
         : f
     );
+
     setRecognizedFaces(updated);
     await saveFaces(updated);
+
+    const updatedFace = updated.find((f) => f.id === selectedFace.id);
+    if (updatedFace && backendConnected) {
+      await syncWithBackend(updatedFace);
+    }
+
     setEditPersonVisible(false);
     setSelectedFace(null);
     setNewPersonData({ name: '', relationship: '', imageUri: null });
@@ -220,6 +404,16 @@ export default function ManageFacesScreen({ navigation }: Props) {
           const updated = recognizedFaces.filter((f) => f.id !== face.id);
           setRecognizedFaces(updated);
           await saveFaces(updated);
+
+          if (backendConnected) {
+            try {
+              await fetch(`${API_URL}/delete_face/${face.id}`, {
+                method: 'DELETE',
+              });
+            } catch (error) {
+              console.error('Delete from backend failed:', error);
+            }
+          }
         },
       },
     ]);
@@ -227,7 +421,11 @@ export default function ManageFacesScreen({ navigation }: Props) {
 
   const openEdit = (face: RecognizedFace) => {
     setSelectedFace(face);
-    setNewPersonData({ name: face.name, relationship: face.relationship, imageUri: face.imageUri });
+    setNewPersonData({
+      name: face.name,
+      relationship: face.relationship,
+      imageUri: face.imageUri,
+    });
     setEditPersonVisible(true);
   };
 
@@ -249,81 +447,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
     </View>
   );
 
-  const PersonModal = ({
-    visible,
-    onClose,
-    onSave,
-    title,
-  }: {
-    visible: boolean;
-    onClose: () => void;
-    onSave: () => void;
-    title: string;
-  }) => (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.modalOverlay}>
-        <View style={s.modalCard}>
-          <View style={s.modalHeader}>
-            <Text style={s.modalTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <MaterialIcons name="close" size={22} color="#64748b" />
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
-            <TouchableOpacity style={s.photoTap} onPress={pickImage} activeOpacity={0.8}>
-              {newPersonData.imageUri ? (
-                <Image source={{ uri: newPersonData.imageUri }} style={s.photo} />
-              ) : (
-                <View style={s.photoPlaceholder}>
-                  <MaterialIcons name="add-a-photo" size={34} color={INDIGO} />
-                  <Text style={s.photoText}>Tap to add photo</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <View style={s.field}>
-              <Text style={s.label}>Name *</Text>
-              <TextInput
-                style={s.input}
-                value={newPersonData.name}
-                onChangeText={(t) => setNewPersonData((p) => ({ ...p, name: t }))}
-                placeholder="Enter full name"
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            <View style={s.field}>
-              <Text style={s.label}>Relationship *</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                {relationships.map((r) => {
-                  const active = newPersonData.relationship === r;
-                  return (
-                    <TouchableOpacity
-                      key={r}
-                      style={[s.chip, active && s.chipActive]}
-                      onPress={() => setNewPersonData((p) => ({ ...p, relationship: r }))}
-                    >
-                      <Text style={[s.chipText, active && s.chipTextActive]}>{r}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </ScrollView>
-
-          <View style={s.modalActions}>
-            <TouchableOpacity style={s.cancel} onPress={onClose}>
-              <Text style={s.cancelTxt}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.save} onPress={onSave}>
-              <Text style={s.saveTxt}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: BG_FROM }} />;
 
@@ -338,8 +462,33 @@ export default function ManageFacesScreen({ navigation }: Props) {
         <View style={{ width: 48 }} />
       </View>
 
+      {/* Backend Status */}
+      <View style={s.statusBar}>
+        <View style={[s.statusDot, { backgroundColor: backendConnected ? '#10b981' : '#ef4444' }]} />
+        <Text style={s.statusText}>
+          {backendConnected ? 'Backend Connected' : 'Backend Offline'}
+        </Text>
+        {backendConnected && (
+          <TouchableOpacity
+            onPress={syncAllFacesToBackend}
+            disabled={isSyncing}
+            style={s.syncBtn}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color={INDIGO} />
+            ) : (
+              <MaterialIcons name="sync" size={18} color={INDIGO} />
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Add new person */}
-      <TouchableOpacity style={s.addCard} onPress={() => setAddPersonVisible(true)} activeOpacity={0.9}>
+      <TouchableOpacity
+        style={s.addCard}
+        onPress={() => setAddPersonVisible(true)}
+        activeOpacity={0.9}
+      >
         <View style={s.addInner}>
           <View style={s.addIcon}>
             <MaterialIcons name="add-photo-alternate" size={24} color={INDIGO} />
@@ -351,7 +500,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
 
       {/* Recognized Faces */}
       <View style={{ paddingHorizontal: 24, marginTop: 22, flex: 1 }}>
-        <Text style={s.section}>Recognized Faces</Text>
+        <Text style={s.section}>Recognized Faces ({recognizedFaces.length})</Text>
 
         <FlatList
           data={recognizedFaces}
@@ -359,6 +508,11 @@ export default function ManageFacesScreen({ navigation }: Props) {
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: '#94a3b8', fontSize: 16 }}>No faces registered yet</Text>
+            </View>
+          }
         />
       </View>
 
@@ -385,6 +539,10 @@ export default function ManageFacesScreen({ navigation }: Props) {
         }}
         onSave={handleAddPerson}
         title="Add New Person"
+        newPersonData={newPersonData}
+        setNewPersonData={setNewPersonData}
+        pickImage={pickImage}
+        relationships={relationships}
       />
       <PersonModal
         visible={editPersonVisible}
@@ -395,18 +553,17 @@ export default function ManageFacesScreen({ navigation }: Props) {
         }}
         onSave={handleEditPerson}
         title="Edit Person"
+        newPersonData={newPersonData}
+        setNewPersonData={setNewPersonData}
+        pickImage={pickImage}
+        relationships={relationships}
       />
     </SafeAreaView>
   );
 }
 
-/* —————————— Styles to MATCH mock —————————— */
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: BG_FROM,
-  },
-
+  root: { flex: 1, backgroundColor: BG_FROM },
   header: {
     paddingHorizontal: 24,
     paddingTop: 20,
@@ -434,7 +591,41 @@ const s = StyleSheet.create({
     color: '#0f172a',
     fontFamily: 'Poppins_700Bold',
   },
-
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    marginHorizontal: 24,
+    marginTop: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#64748b',
+    fontFamily: 'Poppins_500Medium',
+  },
+  syncBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addCard: {
     marginTop: 18,
     marginHorizontal: 24,
@@ -471,14 +662,12 @@ const s = StyleSheet.create({
     color: '#64748b',
     fontFamily: 'Poppins_400Regular',
   },
-
   section: {
     fontSize: 22,
     color: '#334155',
     fontFamily: 'Poppins_700Bold',
     marginBottom: 12,
   },
-
   faceCard: {
     backgroundColor: '#fff',
     borderRadius: 24,
@@ -520,7 +709,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   ctaWrap: {
     position: 'absolute',
     left: 24,
@@ -540,8 +728,6 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   ctaTxt: { color: '#fff', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-
-  /* — Modals — */
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
