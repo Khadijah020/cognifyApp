@@ -1,19 +1,23 @@
 // PatientDashboardScreen.tsx
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import * as Speech from 'expo-speech';
 
+import { MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Linking,
   Modal,
-  Animated,
   PanResponder,
-  ActivityIndicator,
   Platform,
   ScrollView,
   StyleSheet,
@@ -21,16 +25,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
-import HealthDataService from '../services/HealthDataService';
 import FallDetectionService from "../services/FallDetectionService";
-import { supabase } from '../src/lib/supabase';
-import ReminderHelperService from '../services/ReminderHelperService';
+import HealthDataService from '../services/HealthDataService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
+import ReminderHelperService from '../services/ReminderHelperService';
+import { supabase } from '../src/lib/supabase';
 
 import {
   Poppins_400Regular,
@@ -361,7 +361,7 @@ useEffect(() => {
 
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get('https://fac1b4de43f0.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
+      const res = await axios.get('https://032497d116ac.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
       const reminders = res.data.reminders || [];
 
       if (reminders.length > 0) {
@@ -846,7 +846,7 @@ const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?:
           colors={['#818cf8', '#a78bfa']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.reminderCard}
+          style={styles.reminderCCard}
         >
           <View style={styles.reminderIconCircle}>
             <MaterialIcons name="lightbulb" size={48} color="#fff" />
@@ -1206,6 +1206,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
+  reminderScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  reminderWrap: { width: '100%', maxWidth: 380 },
+  reminderCCard: {
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#818cf8',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  reminderIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  reminderTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 24,
+    color: '#fff',
+    marginTop: 4,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  reminderBody: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 18,
+    lineHeight: 28,
+    color: '#ffffff',
+    opacity: 0.95,
+    textAlign: 'center',
+    marginBottom: 18,
+    paddingHorizontal: 6,
+  },
+  reminderCta: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderCtaText: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 18,
+    color: '#4f46e5', // indigo-600
+  },
 });
 
 const modalStyles = StyleSheet.create({
@@ -1312,4 +1370,5 @@ const modalStyles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  
 });

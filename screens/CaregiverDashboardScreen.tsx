@@ -41,10 +41,8 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
-import * as Linking from "expo-linking";
 import HealthDataService from "../services/HealthDataService";
 import FallAlertListener from "../services/FallAlertListener";
-import HealthDataService from "../services/HealthDataService";
 import { supabase } from "../src/lib/supabase";
 import ReminderHelperService from "../services/ReminderHelperService";
 import * as CaregiverService from "../services/CaregiverService";
