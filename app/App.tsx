@@ -39,6 +39,7 @@ export type RootStackParamList = {
   VoiceAssistant: undefined;
   ApiConfiguration: undefined;
   AddReminder: {
+    patientId: string;
     prefill?: {
       title?: string;
       date?: Date;            // or string if you prefer
