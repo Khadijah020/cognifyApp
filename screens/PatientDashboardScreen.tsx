@@ -1,26 +1,31 @@
 // PatientDashboardScreen.tsx
+
 import React, { useState, useEffect, useRef } from 'react';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import * as Speech from 'expo-speech';
+
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Platform,
   Alert,
+  Image,
   Linking,
   Modal,
   Animated,
   PanResponder,
   ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../app/App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import HealthDataService from '../services/HealthDataService';
 import FallDetectionService from "../services/FallDetectionService";
 import { supabase } from '../src/lib/supabase';
@@ -28,12 +33,13 @@ import ReminderHelperService from '../services/ReminderHelperService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
 
 import {
-  useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
+import axios from 'axios';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientDashboard'>;
 
@@ -135,6 +141,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       setShowReminder(false);
     });
   };
+  const [contextualRemindersEnabled, setContextualRemindersEnabled] = useState(true);
+  const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
+  const [currentContextualReminder, setCurrentContextualReminder] = useState<string | undefined>(undefined);
+
+
 
   const panResponder = useRef(
     PanResponder.create({
@@ -316,6 +327,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
+  /* ---------------- Load user settings ---------------- */
+  useEffect(() => {
+    (async () => {
+      const remindersPref = await AsyncStorage.getItem('contextualReminders');
+      const voicePref = await AsyncStorage.getItem('voiceAlerts');
+      if (remindersPref !== null) setContextualRemindersEnabled(remindersPref === 'true');
+      if (voicePref !== null) setVoiceAlertsEnabled(voicePref === 'true');
+    })();
+  }, []);
+
+  /* ---------------- Load health data ---------------- */
   useEffect(() => {
     loadHealthData();
     const interval = setInterval(loadHealthData, 30000);
@@ -333,16 +355,34 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  if (!fontsLoaded || loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: C.bgTo, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={C.indigo500} />
-        <Text style={{ marginTop: 16, fontFamily: 'Poppins_500Medium', color: C.slate600 }}>
-          Loading dashboard...
-        </Text>
-      </View>
-    );
-  }
+  /* ---------------- Poll for contextual reminders ---------------- */
+useEffect(() => {
+  if (!contextualRemindersEnabled) return;
+
+  const interval = setInterval(async () => {
+    try {
+      const res = await axios.get('https://fac1b4de43f0.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
+      const reminders = res.data.reminders || [];
+
+      if (reminders.length > 0) {
+        const reminderText = reminders[0].reminder || "You have a new reminder";
+
+        setCurrentContextualReminder(reminderText);
+        setShowReminder(true);
+
+        if (voiceAlertsEnabled) {
+          Speech.speak(reminderText);
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching reminders:', err);
+    }
+  }, 5000);
+
+  return () => clearInterval(interval);
+}, [contextualRemindersEnabled, voiceAlertsEnabled]);
+
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
   const callCaregiver = async () => {
     const phone = '+11234567890';
@@ -628,6 +668,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             setCurrentReminder(null);
           }} 
         />
+        <ReminderPopup visible={showReminder} onClose={() => setShowReminder(false)} message={currentContextualReminder} />
       </ScrollView>
 
       {/* Reminder Details Modal */}
@@ -789,6 +830,45 @@ const handleSignOut = async (navigation: Props['navigation']) => {
   } catch {}
   navigation.replace('Login');
 };
+
+const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?: string }> = ({ visible, onClose, message }) => {
+  if (!visible) return null;
+
+  const handleClose = () => {
+    Speech.stop();
+    onClose();
+  };
+
+  return (
+    <View style={styles.reminderScrim}>
+      <View style={styles.reminderWrap}>
+        <LinearGradient
+          colors={['#818cf8', '#a78bfa']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.reminderCard}
+        >
+          <View style={styles.reminderIconCircle}>
+            <MaterialIcons name="lightbulb" size={48} color="#fff" />
+          </View>
+
+          <Text style={styles.reminderTitle}>Gentle Reminder</Text>
+
+          <Text style={styles.reminderBody}>
+            {message || "You have a new reminder"}
+          </Text>
+
+          <TouchableOpacity style={styles.reminderCta} activeOpacity={0.9} onPress={handleClose}>
+            <Text style={styles.reminderCtaText}>Okay, got it</Text>
+          </TouchableOpacity>
+        </LinearGradient>
+      </View>
+    </View>
+  );
+};
+
+
+
 
 /* ---------- Styles ---------- */
 const styles = StyleSheet.create({
