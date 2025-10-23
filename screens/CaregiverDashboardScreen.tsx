@@ -1,4 +1,21 @@
 
+// screens/CaregiverDashboardScreen.tsx
+
+import {
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
+  Modal,
+  Animated,
+  Alert,
+  PanResponder,
+  ActivityIndicator,
+} from "react-native";
 import {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -13,20 +30,6 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -38,19 +41,21 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
+import * as Linking from "expo-linking";
+import HealthDataService from "../services/HealthDataService";
 import FallAlertListener from "../services/FallAlertListener";
 import HealthDataService from "../services/HealthDataService";
 import { supabase } from "../src/lib/supabase";
-
+import ReminderHelperService from "../services/ReminderHelperService";
+import * as CaregiverService from "../services/CaregiverService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
 const W = Dimensions.get("window").width;
 
-/* ----------------------- Reminder Modal Types ----------------------- */
 type ReminderData = {
   title: string;
-  subtitle: string; // "Today, 9:00 AM"
+  subtitle: string;
   icon: "medication" | "event";
   chipColor: string;
   chipBg: string;
@@ -60,14 +65,13 @@ type ReminderData = {
     note?: string;
   };
   status?: {
-    time?: string; // "Taken at 9:05 AM"
-    label?: string; // "Confirmed" | "Scheduled"
+    time?: string;
+    label?: string;
   };
-  // ➜ prefill for Edit Reminder
   prefill?: {
     title: string;
-    date: Date;       // exact date/time
-    timeText: string; // "09:00 AM"
+    date: Date;
+    timeText: string;
   };
 };
 
@@ -79,35 +83,81 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     Poppins_700Bold,
   });
   
-const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
+  // 🔥 State for authenticated caregiver and patient
+  const [caregiverId, setCaregiverId] = useState<string | null>(null);
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const [patientName, setPatientName] = useState<string>("Loading...");
   const [alert, setAlert] = useState<any>(null);
-
-  useEffect(() => {
-    // ✅ Start listening for fall alerts
-    FallAlertListener.startListening(caregiverId, (newAlert: any) => {
-      console.log("📩 Fall alert received:", newAlert);
-      setAlert(newAlert);
-    });
-
-    // ✅ Stop listening when the component unmounts
-    return () => FallAlertListener.stopListening();
-  }, [caregiverId]);
-
   
   /* -------------------- Modal state -------------------- */
   const [showReminder, setShowReminder] = useState(false);
   const [activeReminder, setActiveReminder] = useState<ReminderData | null>(null);
+  const [upcomingReminders, setUpcomingReminders] = useState<ReminderData[]>([]);
+  const [loadingReminders, setLoadingReminders] = useState(true);
 
   /* -------------------- Health data state -------------------- */
   const [steps, setSteps] = useState(4280);
   const [activeMinutes, setActiveMinutes] = useState(62);
 
+  // 🔥 Fetch caregiver ID from auth session on mount
   useEffect(() => {
-    loadHealthData();
-    // Refresh health data every 30 seconds
-    const interval = setInterval(loadHealthData, 30000);
-    return () => clearInterval(interval);
+    const initializeCaregiver = async () => {
+      try {
+        console.log('🔐 Fetching authenticated caregiver...');
+        const id = await CaregiverService.getCurrentCaregiversId();
+        
+        if (!id) {
+          Alert.alert('Error', 'No authenticated session found. Please log in again.');
+          navigation.navigate('Login'); 
+          return; 
+        }
+        
+        setCaregiverId(id);
+        console.log('✅ Caregiver ID set:', id);
+        
+        // Fetch the primary patient for this caregiver
+        const patient = await CaregiverService.getPrimaryPatient(id);
+        if (patient) {
+          setPatientId(patient.id);
+          setPatientName(patient.full_name || 'Patient');
+          console.log('✅ Primary patient loaded:', patient.full_name);
+        } else {
+          console.log('⚠️ No patient linked to this caregiver');
+          setPatientName('No Patient Linked');
+        }
+      } catch (error) {
+        console.error('❌ Error initializing caregiver:', error);
+        Alert.alert('Error', 'Failed to load caregiver information');
+      }
+    };
+
+    initializeCaregiver();
   }, []);
+
+  // 🔥 Start fall alert listener when caregiver ID is available
+  useEffect(() => {
+    if (!caregiverId) return;
+
+    console.log('👂 Starting fall alert listener for caregiver:', caregiverId);
+    FallAlertListener.startListening(caregiverId, (newAlert: any) => {
+      console.log("📩 Fall alert received:", newAlert);
+      setAlert(newAlert);
+    });
+
+    return () => FallAlertListener.stopListening();
+  }, [caregiverId]);
+
+  // 🔥 Reload reminders when screen comes into focus (after adding a reminder)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (caregiverId) {
+        console.log('📍 Dashboard focused - refreshing reminders...');
+        loadUpcomingReminders();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, caregiverId]);
 
   const loadHealthData = async () => {
     try {
@@ -117,6 +167,94 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
       setActiveMinutes(minutes);
     } catch (error) {
       console.log('Error loading health data:', error);
+    }
+  };
+
+  // 🔥 Load reminders when caregiver ID is available + Real-time subscription
+  useEffect(() => {
+    if (!caregiverId) return;
+
+    // Initial load
+    loadUpcomingReminders();
+    
+    // Periodic refresh every 2 minutes
+    const interval = setInterval(loadUpcomingReminders, 2 * 60 * 1000);
+    
+    // 🔥 Real-time subscription for new reminders
+    console.log('👂 Setting up real-time subscription for reminders...');
+    const subscription = supabase
+      .channel('reminders-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'reminders',
+          filter: `caregiver_id=eq.${caregiverId}`,
+        },
+        (payload) => {
+          console.log('🔔 Reminder changed:', payload.eventType, payload.new || payload.old);
+          // Reload reminders when any change happens
+          loadUpcomingReminders();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Reminder subscription status:', status);
+      });
+
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+      subscription.unsubscribe();
+      console.log('🛑 Unsubscribed from reminders');
+    };
+  }, [caregiverId]);
+
+  const loadUpcomingReminders = async () => {
+    if (!caregiverId) {
+      console.log('⏳ Waiting for caregiver ID...');
+      return;
+    }
+
+    try {
+      setLoadingReminders(true);
+      console.log('🔍 Loading reminders for caregiver:', caregiverId);
+      
+      // Fetch all pending reminders for this caregiver
+      const { data: allReminders, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .eq('caregiver_id', caregiverId)
+        .eq('status', 'pending') // Only fetch pending reminders
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
+      
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('📋 Fetched reminders:', allReminders?.length || 0);
+      
+      if (!allReminders || allReminders.length === 0) {
+        setUpcomingReminders([]);
+        return;
+      }
+      
+      // Filter to get upcoming reminders (next 24 hours)
+      const upcoming = ReminderHelperService.filterUpcomingReminders(allReminders, 24);
+      console.log('⏰ Upcoming reminders (24h):', upcoming.length);
+      
+      const displayReminders = upcoming.map(r => 
+        ReminderHelperService.convertToReminderData(r)
+      );
+      
+      setUpcomingReminders(displayReminders);
+      console.log('✅ Loaded', displayReminders.length, 'upcoming reminders within 24 hours');
+    } catch (error) {
+      console.error('❌ Failed to load reminders:', error);
+    } finally {
+      setLoadingReminders(false);
     }
   };
 
@@ -137,7 +275,7 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
   const openReminder = (data: ReminderData) => {
     setActiveReminder(data);
     setShowReminder(true);
-    translateY.setValue(50); // small pop-in
+    translateY.setValue(50);
     requestAnimationFrame(() => animateTo(0));
   };
 
@@ -147,13 +285,13 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
     });
   };
 
-  // only the handle needs to respond, but it moves the whole sheet
+  // Pan responder for modal
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
       onPanResponderMove: (_, g) => {
-        const y = Math.max(0, g.dy); // drag down only
+        const y = Math.max(0, g.dy);
         translateY.setValue(y);
       },
       onPanResponderRelease: (_, g) => {
@@ -168,20 +306,19 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
 
   if (!fontsLoaded) return <AppLoading />;
 
-  // helpers to build exact Date for “Edit Reminder”
-  const todayAt = (h: number, m: number) => {
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    return d;
-  };
-  const tomorrowAt = (h: number, m: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(h, m, 0, 0);
-    return d;
-  };
-
-  
+  // Show loading state while fetching caregiver info
+  if (!caregiverId) {
+    return (
+      <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#6366f1" />
+          <Text style={{ marginTop: 16, fontFamily: 'Poppins_500Medium', color: '#475569' }}>
+            Loading your dashboard...
+          </Text>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
@@ -217,7 +354,7 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
             >
               <View style={styles.rowBetween}>
                 <View>
-                  <Text style={styles.h2White}>John Doe</Text>
+                  <Text style={styles.h2White}>{patientName}</Text>
                   <Text style={styles.smallWhite}>Patient Profile</Text>
                 </View>
                 <View style={styles.row}>
@@ -262,114 +399,7 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
           {/* Health Metrics */}
           <SectionTitle title="Health Metrics" />
           <View style={{ paddingHorizontal: 24 }}>
-            {/* Daily Activity */}
-      <CardBox>
-
-
-      
-      {/* 🆘 FALL ALERT POPUP */}
-      <Modal visible={!!alert} transparent animationType="fade">
-  <BlurView intensity={40} tint="dark" style={styles.puoverlay}>
-    <View style={styles.pucentered}>
-      <View style={styles.pucardContainer}>
-        {/* Close Button */}
-        <TouchableOpacity style={styles.pucloseButton} onPress={() => setAlert(null)}>
-          <MaterialIcons name="close" size={30} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-
-        {/* Gradient Card */}
-        <LinearGradient
-          colors={["#f87171", "#f472b6"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.pucard}
-        >
-          {/* Main Icon */}
-          <View style={styles.puiconWrapper}>
-            <MaterialIcons name="personal-injury" size={50} color="#fff" />
-          </View>
-
-          {/* Title */}
-          <Text style={styles.pucardTitle}>FALL DETECTED</Text>
-
-          {/* Info Text */}
-          <Text style={styles.pualertText}>
-            {alert?.patient_name || "Patient"} may have fallen.
-          </Text>
-
-          {/* Timestamp */}
-          <Text style={styles.putimestamp}>
-            {alert?.created_at
-              ? `Timestamp: ${new Date(alert.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}, ${new Date(alert.created_at).toLocaleDateString()}`
-              : "Timestamp: Just now"}
-          </Text>
-
-          {/* Buttons */}
-          <View style={styles.pubuttonGroup}>
-            {/* ✅ Navigate to Patient Location */}
-            <TouchableOpacity
-              style={styles.puprimaryButton}
-              onPress={() => {
-                setAlert(null); // close popup
-                navigation.navigate("PatientLocation");
-              }}
-            >
-              <MaterialIcons name="location-on" size={22} color="#e11d48" />
-              <Text style={styles.puprimaryText}>Check Location</Text>
-            </TouchableOpacity>
-
-            {/* ✅ Call the Patient */}
-            <TouchableOpacity
-              style={styles.pusecondaryButton}
-              onPress={async () => {
-                try {
-                  if (!alert?.patient_id) {
-                    Alert.alert("Error", "Patient ID not found.");
-                    return;
-                  }
-
-                  // Fetch phone number from Supabase
-                  const { data, error } = await supabase
-                    .from("patients")
-                    .select("phone_number, full_name")
-                    .eq("id", alert.patient_id)
-                    .single();
-
-                  if (error) {
-                    console.error("Supabase error:", error);
-                    Alert.alert("Error", "Failed to fetch patient info.");
-                    return;
-                  }
-
-                  const phoneNumber = data?.phone_number;
-                  if (!phoneNumber) {
-                    Alert.alert("Missing Info", "Phone number not available for this patient.");
-                    return;
-                  }
-
-                  // ✅ Open phone dialer
-                  Linking.openURL(`tel:${phoneNumber}`);
-                } catch (err) {
-                  console.error("Error calling patient:", err);
-                  Alert.alert("Error", "Something went wrong.");
-                }
-              }}
-            >
-              <MaterialIcons name="call" size={20} color="#fff" />
-              <Text style={styles.pusecondaryText}>
-                Call {alert?.patient_name || "Patient"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      </View>
-    </View>
-  </BlurView>
-</Modal>
-
+            <CardBox>
               <View style={styles.rowBetween}>
                 <View>
                   <Text style={styles.cardTitle}>Daily Activity</Text>
@@ -387,10 +417,8 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
               </View>
             </CardBox>
 
-            {/* Medication Adherence — EXACT replica */}
             <MedicationAdherenceCardExact />
 
-            {/* Cognition Level */}
             <CardBox>
               <View style={styles.rowBetween}>
                 <Text style={styles.cardTitle}>Cognition Level</Text>
@@ -408,7 +436,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
               </View>
             </CardBox>
 
-            {/* Weekly Adherence */}
             <CardBox>
               <Text style={[styles.cardTitle, { textAlign: "center" }]}>
                 Weekly Adherence
@@ -417,65 +444,43 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
             </CardBox>
           </View>
 
-          {/* Upcoming Reminders */}
-          <SectionTitle title="Upcoming Reminders" />
+          {/* Upcoming Reminders Section */}
+          <View style={{ flexDirection: 'row', marginBottom: 2 }}>
+            <Text style={styles.sectionTitle}>Upcoming Reminders (24h)</Text>
+            <TouchableOpacity 
+              onPress={loadUpcomingReminders}
+              style={{ paddingRight: 20, paddingTop: 17 }}
+            >
+              <MaterialIcons name="refresh" size={24} color="#6366f1" />
+            </TouchableOpacity>
+          </View>
           <View style={{ paddingHorizontal: 24 }}>
-            <ListItem
-              title="Morning Medication"
-              subtitle="Today, 9:00 AM"
-              icon="medication"
-              color="#14b8a6"
-              bg="#ccfbf1"
-              onPress={() =>
-                openReminder({
-                  title: "Morning Medication",
-                  subtitle: "Today, 9:00 AM",
-                  icon: "medication",
-                  chipColor: "#14b8a6",
-                  chipBg: "#ccfbf1",
-                  details: {
-                    medication: "Donepezil 10mg",
-                    instructions:
-                      "Take one tablet with breakfast. Should be taken with food to avoid stomach upset.",
-                    note:
-                      "Make sure he drinks a full glass of water with the pill.",
-                  },
-                  status: { time: "Taken at 9:05 AM", label: "Confirmed" },
-                  prefill: {
-                    title: "Morning Medication",
-                    date: todayAt(9, 0),
-                    timeText: "09:00 AM",
-                  },
-                })
-              }
-            />
-            <ListItem
-              title="Doctor's Appointment"
-              subtitle="Tomorrow, 2:30 PM"
-              icon="event"
-              color="#3b82f6"
-              bg="#dbeafe"
-              onPress={() =>
-                openReminder({
-                  title: "Doctor's Appointment",
-                  subtitle: "Tomorrow, 2:30 PM",
-                  icon: "event",
-                  chipColor: "#3b82f6",
-                  chipBg: "#dbeafe",
-                  details: {
-                    medication: "With Dr. Smith — Room 402",
-                    instructions: "Arrive 10 minutes early. Bring insurance card.",
-                    note: "Confirm transportation with caretaker.",
-                  },
-                  status: { time: "Not yet", label: "Scheduled" },
-                  prefill: {
-                    title: "Doctor's Appointment",
-                    date: tomorrowAt(14, 30),
-                    timeText: "02:30 PM",
-                  },
-                })
-              }
-            />
+            {loadingReminders ? (
+              <View style={styles.emptyStateCard}>
+                <ActivityIndicator size="large" color="#6366f1" />
+                <Text style={styles.emptyStateTitle}>Loading reminders...</Text>
+              </View>
+            ) : upcomingReminders.length > 0 ? (
+              upcomingReminders.map((reminder, index) => (
+                <ListItem
+                  key={index}
+                  title={reminder.title}
+                  subtitle={reminder.subtitle}
+                  icon={reminder.icon}
+                  color={reminder.chipColor}
+                  bg={reminder.chipBg}
+                  onPress={() => openReminder(reminder)}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateCard}>
+                <MaterialIcons name="event-available" size={48} color="#94a3b8" />
+                <Text style={styles.emptyStateTitle}>No Upcoming Reminders</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  All clear for the next 24 hours!
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Recent Activity */}
@@ -498,35 +503,121 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
           </View>
         </ScrollView>
 
-        {/* ------------------------------ Reminder Modal ------------------------------ */}
+        {/* Fall Alert Modal */}
+        <Modal visible={!!alert} transparent animationType="fade">
+          <BlurView intensity={40} tint="dark" style={styles.puoverlay}>
+            <View style={styles.pucentered}>
+              <View style={styles.pucardContainer}>
+                <TouchableOpacity style={styles.pucloseButton} onPress={() => setAlert(null)}>
+                  <MaterialIcons name="close" size={30} color="rgba(255,255,255,0.8)" />
+                </TouchableOpacity>
+
+                <LinearGradient
+                  colors={["#f87171", "#f472b6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.pucard}
+                >
+                  <View style={styles.puiconWrapper}>
+                    <MaterialIcons name="personal-injury" size={50} color="#fff" />
+                  </View>
+
+                  <Text style={styles.pucardTitle}>FALL DETECTED</Text>
+                  <Text style={styles.pualertText}>
+                    {alert?.patient_name || 'Your patient'} may have fallen.
+                  </Text> 
+                  <Text style={styles.putimestamp}>
+                    {alert?.created_at
+                      ? `Timestamp: ${new Date(alert.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}, ${new Date(alert.created_at).toLocaleDateString()}`
+                      : "Timestamp: Just now"}
+                  </Text>
+
+                  <View style={styles.pubuttonGroup}>
+                    <TouchableOpacity
+                      style={styles.puprimaryButton}
+                      onPress={() => {
+                        setAlert(null);
+                        navigation.navigate("PatientLocation");
+                      }}
+                    >
+                      <MaterialIcons name="location-on" size={22} color="#e11d48" />
+                      <Text style={styles.puprimaryText}>Check Location</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.pusecondaryButton}
+                      onPress={async () => {
+                        try {
+                          if (!alert?.patient_id) {
+                            Alert.alert("Error", "Patient ID not found.");
+                            return;
+                          }
+
+                          const { data, error } = await supabase
+                            .from("patients")
+                            .select("phone_number, full_name")
+                            .eq("id", alert.patient_id)
+                            .single();
+
+                          if (error) {
+                            console.error("Supabase error:", error);
+                            Alert.alert("Error", "Failed to fetch patient info.");
+                            return;
+                          }
+
+                          const phoneNumber = data?.phone_number;
+                          if (!phoneNumber) {
+                            Alert.alert("Missing Info", "Phone number not available for this patient.");
+                            return;
+                          }
+
+                          Linking.openURL(`tel:${phoneNumber}`);
+                        } catch (err) {
+                          console.error("Error calling patient:", err);
+                          Alert.alert("Error", "Something went wrong.");
+                        }
+                      }}
+                    >
+                      <MaterialIcons name="call" size={20} color="#fff" />
+                      <Text style={styles.pusecondaryText}>
+                        Call {alert?.patient_name || 'Patient'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </LinearGradient>
+              </View>
+            </View>
+          </BlurView>
+        </Modal>
+
+        {/* Reminder Modal */}
         <Modal
           visible={showReminder}
           transparent
           animationType="none"
           onRequestClose={closeReminder}
         >
-          {/* FULLSCREEN overlay with blur all the way to the top */}
           <View style={modalStyles.overlayRoot} pointerEvents="box-none">
             <BlurView
               intensity={30}
               tint="dark"
               style={StyleSheet.absoluteFillObject}
             />
-            {/* dark tint over the blur */}
             <TouchableOpacity
               style={modalStyles.overlayTint}
               activeOpacity={1}
               onPress={closeReminder}
             />
 
-            {/* Bottom sheet */}
             <Animated.View
               style={[modalStyles.sheet, { transform: [{ translateY }] }]}
               onLayout={(e) => {
                 sheetHeight.current = e.nativeEvent.layout.height;
               }}
             >
-              {/* Handle bar — this is draggable */}
               <View
                 {...panResponder.panHandlers}
                 style={modalStyles.handleWrap}
@@ -534,7 +625,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
                 <View style={modalStyles.handle} />
               </View>
 
-              {/* Header row with icon + title/subtitle */}
               <View style={modalStyles.headerRow}>
                 <View
                   style={[
@@ -554,7 +644,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
                 </View>
               </View>
 
-              {/* Details */}
               <View style={modalStyles.section}>
                 <Text style={modalStyles.sectionTitle}>Details</Text>
 
@@ -589,7 +678,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
                 ) : null}
               </View>
 
-              {/* Status */}
               <View style={modalStyles.section}>
                 <Text style={modalStyles.sectionTitle}>Status</Text>
                 <View style={modalStyles.statusCard}>
@@ -624,7 +712,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
                 </View>
               </View>
 
-              {/* Footer buttons */}
               <View style={modalStyles.footerRow}>
                 <TouchableOpacity style={modalStyles.closeBtn} onPress={closeReminder}>
                   <MaterialIcons name="close" size={20} color="#334155" />
@@ -635,7 +722,14 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
                   activeOpacity={0.9}
                   onPress={() => {
                     if (activeReminder?.prefill) {
-                      navigation.navigate("AddReminder", { prefill: activeReminder.prefill });
+                      if (!patientId) {
+                        Alert.alert("Missing Patient", "Please select a patient before editing a reminder.");
+                        return;
+                      }
+                      navigation.navigate("AddReminder", {
+                        patientId: patientId,
+                        prefill: activeReminder.prefill,
+                      });
                       setShowReminder(false);
                     }
                   }}
@@ -655,7 +749,6 @@ const caregiverId = "3091a716-e7ec-419a-98ad-184db21f5411"; // your working ID
             </Animated.View>
           </View>
         </Modal>
-        {/* ---------------------------- /Reminder Modal ---------------------------- */}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -674,7 +767,7 @@ function QuickActionTitle({ title }: { title: string }) {
 type GhostBtnProps = {
   icon: string;
   text: string;
-  onPress?: () => void; // 👈 make onPress optional
+  onPress?: () => void;
 };
 
 function GhostBtn({ icon, text, onPress }: GhostBtnProps) {
@@ -685,7 +778,6 @@ function GhostBtn({ icon, text, onPress }: GhostBtnProps) {
     </TouchableOpacity>
   );
 }
-
 
 function Card({
   label,
@@ -751,8 +843,6 @@ function ListItem({
     </TouchableOpacity>
   );
 }
-
-/* ---------------- Existing charts & helpers (unchanged) ---------------- */
 
 function MedicationAdherenceCardExact() {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -1062,98 +1152,121 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366F1",
   },
   puoverlay: {
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.6)",
-  justifyContent: "center",
-  alignItems: "center",
-  padding: 16,
-},
-pucentered: {
-  width: "100%",
-  maxWidth: 400,
-},
-pucardContainer: {
-  position: "relative",
-},
-pucloseButton: {
-  position: "absolute",
-  top: 12,
-  left: 12,
-  zIndex: 10,
-},
-pucard: {
-  borderRadius: 28,
-  paddingVertical: 40,
-  paddingHorizontal: 24,
-  alignItems: "center",
-  shadowColor: "#f472b6",
-  shadowOffset: { width: 0, height: 12 },
-  shadowOpacity: 0.5,
-  shadowRadius: 25,
-  elevation: 10,
-},
-puiconWrapper: {
-  backgroundColor: "rgba(255,255,255,0.3)",
-  width: 90,
-  height: 90,
-  borderRadius: 45,
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 16,
-},
-pucardTitle: {
-  fontSize: 24,
-  fontWeight: "800",
-  color: "#fff",
-  marginBottom: 8,
-},
-pualertText: {
-  fontSize: 18,
-  color: "#fff",
-  textAlign: "center",
-  marginBottom: 4,
-  fontWeight: "500",
-},
-putimestamp: {
-  fontSize: 13,
-  color: "rgba(255,255,255,0.8)",
-  textAlign: "center",
-  marginBottom: 28,
-},
-pubuttonGroup: {
-  width: "100%",
-  gap: 10,
-},
-puprimaryButton: {
-  backgroundColor: "#fff",
-  borderRadius: 20,
-  paddingVertical: 14,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-},
-puprimaryText: {
-  color: "#e11d48",
-  fontSize: 17,
-  fontWeight: "700",
-},
-pusecondaryButton: {
-  borderWidth: 2,
-  borderColor: "rgba(255,255,255,0.8)",
-  borderRadius: 20,
-  paddingVertical: 12,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-},
-pusecondaryText: {
-  color: "#fff",
-  fontSize: 16,
-  fontWeight: "600",
-},
-
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  pucentered: {
+    width: "100%",
+    maxWidth: 400,
+  },
+  pucardContainer: {
+    position: "relative",
+  },
+  pucloseButton: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 10,
+  },
+  pucard: {
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    shadowColor: "#f472b6",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+    elevation: 10,
+  },
+  puiconWrapper: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  pucardTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  pualertText: {
+    fontSize: 18,
+    color: "#fff",
+    textAlign: "center",
+    marginBottom: 4,
+    fontWeight: "500",
+  },
+  putimestamp: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
+    marginBottom: 28,
+  },
+  pubuttonGroup: {
+    width: "100%",
+    gap: 10,
+  },
+  puprimaryButton: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  puprimaryText: {
+    color: "#e11d48",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  pusecondaryButton: {
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.8)",
+    borderRadius: 20,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  pusecondaryText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyStateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  emptyStateTitle: {
+    marginTop: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#475569',
+    fontSize: 16,
+  },
+  emptyStateSubtitle: {
+    marginTop: 4,
+    fontFamily: 'Poppins_400Regular',
+    color: '#94a3b8',
+    fontSize: 14,
+    textAlign: 'center',
+  },
 });
 
 const med = StyleSheet.create({
@@ -1168,12 +1281,9 @@ const med = StyleSheet.create({
     fontSize: 14,
     color: "#94a3b8",
   },
-
 });
 
-/* -------------------- Modal-specific styles -------------------- */
 const modalStyles = StyleSheet.create({
-  // absolute-fill so blur + tint cover the entire screen (header included)
   overlayRoot: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "flex-end",
