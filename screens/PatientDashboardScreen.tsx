@@ -107,7 +107,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [loadingReminders, setLoadingReminders] = useState(true);
   const [loading, setLoading] = useState(true);
   
-  // ✅ Real-time reminder notification state
+  // ✅ Real-time SIMPLE reminder notification state (NOT contextual)
   const [currentReminder, setCurrentReminder] = useState<ReminderData | null>(null);
   const [showReminderNotification, setShowReminderNotification] = useState(false);
 
@@ -141,11 +141,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       setShowReminder(false);
     });
   };
+  
+  // ✅ CONTEXTUAL REMINDERS - Separate state (DO NOT TOUCH)
   const [contextualRemindersEnabled, setContextualRemindersEnabled] = useState(true);
   const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
   const [currentContextualReminder, setCurrentContextualReminder] = useState<string | undefined>(undefined);
-
-
+  const [showContextualReminder, setShowContextualReminder] = useState(false);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -171,50 +172,47 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   }, []);
 
   const loadUserData = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const patientProfile = await getAuthenticatedPatientProfile();
-    
-    if (!patientProfile) {
-      Alert.alert('Error', 'Patient profile not found. Please log in again.');
-      navigation.replace('Login');
-      return;
-    }
-
-    console.log('✅ Patient profile loaded:', patientProfile.id, patientProfile.full_name);
-    setPatientId(patientProfile.id);
-    setPatientName(patientProfile.full_name || 'Patient');
-
-    // ✅ Get caregiver_id directly from patient profile
-    // Your patients table structure: id, caregiver_id, email, full_name, phone_number, created_at
-    const caregiverIdFromProfile = patientProfile.caregiver_id;
-    
-    if (caregiverIdFromProfile) {
-      console.log('✅ Caregiver ID found:', caregiverIdFromProfile);
-      setCaregiverId(caregiverIdFromProfile);
+      const patientProfile = await getAuthenticatedPatientProfile();
       
-      // Start fall detection immediately
-      console.log('🚀 Starting fall detection service...');
-      FallDetectionService.start(patientProfile.id, caregiverIdFromProfile);
-      console.log('✅ Fall detection service started successfully');
-    } else {
-      console.warn('⚠️ No caregiver assigned to this patient');
-      Alert.alert(
-        'No Caregiver Assigned',
-        'Fall detection requires a caregiver to be assigned to your account.',
-        [{ text: 'OK' }]
-      );
-    }
+      if (!patientProfile) {
+        Alert.alert('Error', 'Patient profile not found. Please log in again.');
+        navigation.replace('Login');
+        return;
+      }
 
-  } catch (error) {
-    console.error('❌ Error loading user data:', error);
-    Alert.alert('Error', 'Failed to load dashboard.');
-    navigation.replace('Login');
-  } finally {
-    setLoading(false);
-  }
-};
+      console.log('✅ Patient profile loaded:', patientProfile.id, patientProfile.full_name);
+      setPatientId(patientProfile.id);
+      setPatientName(patientProfile.full_name || 'Patient');
+
+      const caregiverIdFromProfile = patientProfile.caregiver_id;
+      
+      if (caregiverIdFromProfile) {
+        console.log('✅ Caregiver ID found:', caregiverIdFromProfile);
+        setCaregiverId(caregiverIdFromProfile);
+        
+        console.log('🚀 Starting fall detection service...');
+        FallDetectionService.start(patientProfile.id, caregiverIdFromProfile);
+        console.log('✅ Fall detection service started successfully');
+      } else {
+        console.warn('⚠️ No caregiver assigned to this patient');
+        Alert.alert(
+          'No Caregiver Assigned',
+          'Fall detection requires a caregiver to be assigned to your account.',
+          [{ text: 'OK' }]
+        );
+      }
+
+    } catch (error) {
+      console.error('❌ Error loading user data:', error);
+      Alert.alert('Error', 'Failed to load dashboard.');
+      navigation.replace('Login');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ✅ Load reminders when patient ID is available
   useEffect(() => {
@@ -234,7 +232,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           table: 'reminders',
           filter: `patient_id=eq.${patientId}`,
         },
-        () => loadUpcomingReminders()
+        () => {
+          console.log('📡 Reminder changed - reloading list');
+          loadUpcomingReminders();
+        }
       )
       .subscribe();
 
@@ -245,7 +246,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     };
   }, [patientId]);
 
-  // ✅ Check for reminders that should trigger NOW
+  // ✅ Check for SIMPLE reminders that should trigger NOW
   useEffect(() => {
     if (!patientId) return;
 
@@ -261,20 +262,34 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
         const now = new Date();
         
-        // Find reminders that are due right now (within 1 minute window)
+        // Find reminders that are due right now
         const dueReminders = allReminders.filter(r => {
           const reminderTime = ReminderHelperService.parseReminderDateTime(r.date, r.time);
           const timeDiff = reminderTime.getTime() - now.getTime();
           
-          // Trigger if within 1 minute of scheduled time
-          return timeDiff >= 0 && timeDiff < 60 * 1000;
+          return timeDiff >= -30 * 1000 && timeDiff < 2 * 60 * 1000;
         });
 
         if (dueReminders.length > 0 && !showReminderNotification) {
           const reminder = dueReminders[0];
+          
+          const lastShownKey = `reminder_shown_${reminder.id}`;
+          const lastShownTime = await AsyncStorage.getItem(lastShownKey);
+          
+          if (lastShownTime) {
+            const timeSinceShown = now.getTime() - parseInt(lastShownTime, 10);
+            if (timeSinceShown < 5 * 60 * 1000) {
+              console.log('⏭️ Skipping reminder - already shown recently:', reminder.title);
+              return;
+            }
+          }
+          
           const displayData = ReminderHelperService.convertToReminderData(reminder);
           
-          console.log('⏰ REMINDER DUE NOW:', reminder.title, 'at', reminder.time);
+          console.log('⏰ SIMPLE REMINDER DUE NOW:', reminder.title, 'at', reminder.time);
+          
+          await AsyncStorage.setItem(lastShownKey, now.getTime().toString());
+          
           setCurrentReminder(displayData);
           setShowReminderNotification(true);
         }
@@ -283,9 +298,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       }
     };
 
-    // Check every 30 seconds for due reminders
     checkForDueReminders();
-    const reminderCheckInterval = setInterval(checkForDueReminders, 30 * 1000);
+    const reminderCheckInterval = setInterval(checkForDueReminders, 20 * 1000);
 
     return () => clearInterval(reminderCheckInterval);
   }, [patientId, showReminderNotification]);
@@ -327,7 +341,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  /* ---------------- Load user settings ---------------- */
+  /* ---------------- Load user settings for CONTEXTUAL reminders (DO NOT TOUCH) ---------------- */
   useEffect(() => {
     (async () => {
       const remindersPref = await AsyncStorage.getItem('contextualReminders');
@@ -355,32 +369,32 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  /* ---------------- Poll for contextual reminders ---------------- */
-useEffect(() => {
-  if (!contextualRemindersEnabled) return;
+  /* ---------------- Poll for CONTEXTUAL reminders (DO NOT TOUCH) ---------------- */
+  useEffect(() => {
+    if (!contextualRemindersEnabled) return;
 
-  const interval = setInterval(async () => {
-    try {
-      const res = await axios.get('https://032497d116ac.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
-      const reminders = res.data.reminders || [];
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get('https://032497d116ac.ngrok-free.app/get_reminders');
+        const reminders = res.data.reminders || [];
 
-      if (reminders.length > 0) {
-        const reminderText = reminders[0].reminder || "You have a new reminder";
+        if (reminders.length > 0) {
+          const reminderText = reminders[0].reminder || "You have a new reminder";
 
-        setCurrentContextualReminder(reminderText);
-        setShowReminder(true);
+          setCurrentContextualReminder(reminderText);
+          setShowContextualReminder(true);
 
-        if (voiceAlertsEnabled) {
-          Speech.speak(reminderText);
+          if (voiceAlertsEnabled) {
+            Speech.speak(reminderText);
+          }
         }
+      } catch (err) {
+        console.log('Error fetching contextual reminders:', err);
       }
-    } catch (err) {
-      console.log('Error fetching reminders:', err);
-    }
-  }, 5000);
+    }, 5000);
 
-  return () => clearInterval(interval);
-}, [contextualRemindersEnabled, voiceAlertsEnabled]);
+    return () => clearInterval(interval);
+  }, [contextualRemindersEnabled, voiceAlertsEnabled]);
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
@@ -392,72 +406,177 @@ useEffect(() => {
     else Linking.openURL(url);
   };
 
+  // ✅ SIMPLE MEDICATION REMINDER POPUP (with fixed timer)
   const MedicationReminderPopup: React.FC<{ visible: boolean; reminder: ReminderData | null; onClose: () => void }> = ({ visible, reminder, onClose }) => {
-    if (!visible || !reminder) return null;
+    const [timeRemaining, setTimeRemaining] = React.useState(300);
+    const timerStartTimeRef = React.useRef<number | null>(null);
+    const timerIntervalRef = React.useRef<number | null>(null);
+    const autoCloseTimeoutRef = React.useRef<number | null>(null);
+
+    // ✅ FIX: Start timer only once when popup becomes visible
+    React.useEffect(() => {
+      if (visible && reminder) {
+        console.log('⏱️ Starting 5-minute timer for reminder:', reminder.id);
+        
+        // Record start time
+        timerStartTimeRef.current = Date.now();
+        setTimeRemaining(300);
+
+        // Update countdown every second based on elapsed time
+        timerIntervalRef.current = window.setInterval(() => {
+          if (timerStartTimeRef.current) {
+            const elapsed = Math.floor((Date.now() - timerStartTimeRef.current) / 1000);
+            const remaining = Math.max(0, 300 - elapsed);
+            setTimeRemaining(remaining);
+          }
+        }, 1000);
+
+        // Auto-close after exactly 5 minutes
+        autoCloseTimeoutRef.current = window.setTimeout(() => {
+          handleMissed();
+        }, 300000);
+
+        return () => {
+          if (timerIntervalRef.current !== null) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          if (autoCloseTimeoutRef.current !== null) {
+            clearTimeout(autoCloseTimeoutRef.current);
+            autoCloseTimeoutRef.current = null;
+          }
+          timerStartTimeRef.current = null;
+        };
+      }
+    }, [visible, reminder?.id]);
+
+    const clearTimers = () => {
+      if (timerIntervalRef.current !== null) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      if (autoCloseTimeoutRef.current !== null) {
+        clearTimeout(autoCloseTimeoutRef.current);
+        autoCloseTimeoutRef.current = null;
+      }
+      timerStartTimeRef.current = null;
+    };
+
+    const handleMissed = async () => {
+      if (!reminder?.id) {
+        clearTimers();
+        onClose();
+        return;
+      }
+      
+      try {
+        console.log('❌ Marking reminder as missed:', reminder.id);
+        
+        await supabase
+          .from('reminders')
+          .update({ status: 'missed' })
+          .eq('id', reminder.id);
+        
+        console.log('✅ Reminder marked as missed');
+        
+        await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
+        await loadUpcomingReminders();
+      } catch (error) {
+        console.error('❌ Error marking reminder as missed:', error);
+      }
+      
+      clearTimers();
+      onClose();
+    };
 
     const handleTaken = async () => {
-      if (reminder.id) {
-        try {
-          // Mark reminder as completed
-          await supabase
-            .from('reminders')
-            .update({ status: 'completed' })
-            .eq('id', reminder.id);
-          
-          console.log('✅ Reminder marked as completed');
-        } catch (error) {
-          console.error('❌ Error updating reminder:', error);
-        }
+      clearTimers();
+      
+      if (!reminder?.id) {
+        onClose();
+        return;
       }
+      
+      try {
+        console.log('✅ Marking reminder as completed:', reminder.id);
+        
+        await supabase
+          .from('reminders')
+          .update({ status: 'completed' })
+          .eq('id', reminder.id);
+        
+        console.log('✅ Reminder marked as completed');
+        
+        await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
+        await loadUpcomingReminders();
+      } catch (error) {
+        console.error('❌ Error updating reminder:', error);
+      }
+      
       onClose();
     };
 
     const handleLater = async () => {
-      if (reminder.id) {
-        try {
-          // Calculate 10 minutes from now
-          const now = new Date();
-          const newTime = new Date(now.getTime() + 10 * 60 * 1000);
-          
-          // Format the new time
-          const hours = newTime.getHours();
-          const minutes = newTime.getMinutes();
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const displayHours = hours % 12 || 12;
-          const displayMinutes = minutes.toString().padStart(2, '0');
-          const newTimeString = `${displayHours}:${displayMinutes} ${ampm}`;
-          
-          // Format the date (YYYY-MM-DD)
-          const newDate = newTime.toISOString().split('T')[0];
-          
-          console.log('⏰ Rescheduling reminder to:', newDate, newTimeString);
-          
-          // Update the reminder in database
-          await supabase
-            .from('reminders')
-            .update({ 
-              date: newDate,
-              time: newTimeString,
-              status: 'pending'
-            })
-            .eq('id', reminder.id);
-          
-          console.log('✅ Reminder rescheduled for 10 minutes later');
-          Alert.alert(
-            'Reminder Snoozed',
-            `I'll remind you again at ${newTimeString}`,
-            [{ text: 'OK' }]
-          );
-          
-          // Refresh the reminders list
-          loadUpcomingReminders();
-        } catch (error) {
-          console.error('❌ Error rescheduling reminder:', error);
-          Alert.alert('Error', 'Failed to reschedule reminder');
-        }
+      clearTimers();
+      
+      if (!reminder?.id) {
+        onClose();
+        return;
       }
+      
+      try {
+        const now = new Date();
+        const newTime = new Date(now.getTime() + 10 * 60 * 1000);
+        
+        const hours = newTime.getHours();
+        const minutes = newTime.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours % 12 || 12;
+        const displayMinutes = minutes.toString().padStart(2, '0');
+        const newTimeString = `${displayHours}:${displayMinutes} ${ampm}`;
+        
+        const year = newTime.getFullYear();
+        const month = String(newTime.getMonth() + 1).padStart(2, '0');
+        const day = String(newTime.getDate()).padStart(2, '0');
+        const newDate = `${year}-${month}-${day}`;
+        
+        console.log('⏰ Rescheduling reminder to:', newDate, newTimeString);
+        
+        await supabase
+          .from('reminders')
+          .update({ 
+            date: newDate,
+            time: newTimeString,
+            status: 'pending'
+          })
+          .eq('id', reminder.id);
+        
+        console.log('✅ Reminder rescheduled for 10 minutes later');
+        
+        await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
+        
+        Alert.alert(
+          'Reminder Snoozed',
+          `I'll remind you again at ${newTimeString}`,
+          [{ text: 'OK' }]
+        );
+        
+        await loadUpcomingReminders();
+      } catch (error) {
+        console.error('❌ Error rescheduling reminder:', error);
+        Alert.alert('Error', 'Failed to reschedule reminder');
+      }
+      
       onClose();
     };
+
+    const formatTimeRemaining = () => {
+      const minutes = Math.floor(timeRemaining / 60);
+      const seconds = timeRemaining % 60;
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    if (!visible || !reminder) return null;
 
     return (
       <View style={styles.reminderOverlay}>
@@ -468,6 +587,12 @@ useEffect(() => {
             end={{ x: 1, y: 1 }}
             style={styles.reminderCardModern}
           >
+            {/* ✅ FIX: Timer badge positioned ABOVE icon */}
+            <View style={styles.timerBadge}>
+              <MaterialIcons name="timer" size={14} color="#fff" />
+              <Text style={styles.timerText}>Auto-close in {formatTimeRemaining()}</Text>
+            </View>
+
             <View style={styles.reminderIconOuter}>
               <View style={styles.reminderIconInner}>
                 <MaterialIcons 
@@ -499,7 +624,18 @@ useEffect(() => {
               activeOpacity={0.9}
               onPress={handleLater}
             >
-              <Text style={styles.secondaryBtnText}>Remind me later</Text>
+              <Text style={styles.secondaryBtnText}>Remind me later (10 min)</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.dismissBtn}
+              activeOpacity={0.9}
+              onPress={() => {
+                clearTimers();
+                onClose();
+              }}
+            >
+              <Text style={styles.dismissBtnText}>Dismiss (no action)</Text>
             </TouchableOpacity>
           </LinearGradient>
         </View>
@@ -660,6 +796,7 @@ useEffect(() => {
           </TouchableOpacity>
         </View>
 
+        {/* ✅ SIMPLE Reminder Popup */}
         <MedicationReminderPopup 
           visible={showReminderNotification} 
           reminder={currentReminder}
@@ -668,7 +805,13 @@ useEffect(() => {
             setCurrentReminder(null);
           }} 
         />
-        <ReminderPopup visible={showReminder} onClose={() => setShowReminder(false)} message={currentContextualReminder} />
+        
+        {/* ✅ CONTEXTUAL Reminder Popup (DO NOT TOUCH) */}
+        <ReminderPopup 
+          visible={showContextualReminder} 
+          onClose={() => setShowContextualReminder(false)} 
+          message={currentContextualReminder} 
+        />
       </ScrollView>
 
       {/* Reminder Details Modal */}
@@ -831,6 +974,7 @@ const handleSignOut = async (navigation: Props['navigation']) => {
   navigation.replace('Login');
 };
 
+// ✅ CONTEXTUAL Reminder Popup Component (DO NOT TOUCH)
 const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?: string }> = ({ visible, onClose, message }) => {
   if (!visible) return null;
 
@@ -866,9 +1010,6 @@ const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?:
     </View>
   );
 };
-
-
-
 
 /* ---------- Styles ---------- */
 const styles = StyleSheet.create({
@@ -1151,6 +1292,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
+  timerBadge: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 4,
+    marginBottom: 16, // Space between timer and icon
+  },
+  timerText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+    color: '#fff',
+  },
   reminderIconOuter: {
     marginBottom: 16,
   },
@@ -1206,6 +1363,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
+  dismissBtn: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  dismissBtnText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  
+  // ✅ CONTEXTUAL Reminder styles (DO NOT TOUCH)
   reminderScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -1262,7 +1436,7 @@ const styles = StyleSheet.create({
   reminderCtaText: {
     fontFamily: 'Poppins_700Bold',
     fontSize: 18,
-    color: '#4f46e5', // indigo-600
+    color: '#4f46e5',
   },
 });
 
@@ -1370,5 +1544,4 @@ const modalStyles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  
 });

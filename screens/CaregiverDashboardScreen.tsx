@@ -1,5 +1,4 @@
-
-// screens/CaregiverDashboardScreen.tsx
+// screens/CaregiverDashboardScreen.tsx - PART 1 (Imports and Types)
 
 import {
   SafeAreaView,
@@ -45,6 +44,7 @@ import HealthDataService from "../services/HealthDataService";
 import FallAlertListener from "../services/FallAlertListener";
 import { supabase } from "../src/lib/supabase";
 import ReminderHelperService from "../services/ReminderHelperService";
+import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import * as CaregiverService from "../services/CaregiverService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
@@ -81,7 +81,6 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     Poppins_700Bold,
   });
   
-  // 🔥 State for authenticated caregiver and patient
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>("Loading...");
@@ -96,8 +95,12 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   /* -------------------- Health data state -------------------- */
   const [steps, setSteps] = useState(4280);
   const [activeMinutes, setActiveMinutes] = useState(62);
+  
+  /* ✅ Medication adherence data */
+  const [medicationAdherence, setMedicationAdherence] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [loadingAdherence, setLoadingAdherence] = useState(true);
 
-  // 🔥 Fetch caregiver ID from auth session on mount
+  // ✅ Fetch caregiver ID from auth session on mount
   useEffect(() => {
     const initializeCaregiver = async () => {
       try {
@@ -113,7 +116,6 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
         setCaregiverId(id);
         console.log('✅ Caregiver ID set:', id);
         
-        // Fetch the primary patient for this caregiver
         const patient = await CaregiverService.getPrimaryPatient(id);
         if (patient) {
           setPatientId(patient.id);
@@ -132,7 +134,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     initializeCaregiver();
   }, []);
 
-  // 🔥 Start fall alert listener when caregiver ID is available
+  // ✅ Start fall alert listener when caregiver ID is available
   useEffect(() => {
     if (!caregiverId) return;
 
@@ -145,17 +147,62 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     return () => FallAlertListener.stopListening();
   }, [caregiverId]);
 
-  // 🔥 Reload reminders when screen comes into focus (after adding a reminder)
+  // ✅ Load medication adherence when patient ID is available
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadMedicationAdherence();
+    
+    // Refresh adherence every 5 minutes
+    const interval = setInterval(loadMedicationAdherence, 5 * 60 * 1000);
+    
+    // Run daily maintenance check every hour
+    const maintenanceInterval = setInterval(() => {
+      MedicationAdherenceService.runDailyMaintenance(patientId);
+    }, 60 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(maintenanceInterval);
+    };
+  }, [patientId]);
+
+  const loadMedicationAdherence = async () => {
+    if (!patientId) return;
+
+    try {
+      setLoadingAdherence(true);
+      console.log('📊 Loading medication adherence for patient:', patientId);
+      
+      // First, mark any overdue reminders as missed
+      await MedicationAdherenceService.markOverdueRemindersAsMissed(patientId);
+      
+      // Then get the weekly adherence data
+      const weeklyData = await MedicationAdherenceService.getWeeklyAdherence(patientId);
+      
+      setMedicationAdherence(weeklyData);
+      console.log('✅ Medication adherence loaded:', weeklyData);
+    } catch (error) {
+      console.error('❌ Error loading medication adherence:', error);
+    } finally {
+      setLoadingAdherence(false);
+    }
+  };
+
+  // ✅ Reload reminders when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if (caregiverId) {
         console.log('📍 Dashboard focused - refreshing reminders...');
         loadUpcomingReminders();
+        if (patientId) {
+          loadMedicationAdherence();
+        }
       }
     });
 
     return unsubscribe;
-  }, [navigation, caregiverId]);
+  }, [navigation, caregiverId, patientId]);
 
   const loadHealthData = async () => {
     try {
@@ -168,45 +215,43 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     }
   };
 
-  // 🔥 Load reminders when caregiver ID is available + Real-time subscription
+  // ✅ Load reminders + Real-time subscription
   useEffect(() => {
     if (!caregiverId) return;
 
-    // Initial load
     loadUpcomingReminders();
     
-    // Periodic refresh every 2 minutes
     const interval = setInterval(loadUpcomingReminders, 2 * 60 * 1000);
     
-    // 🔥 Real-time subscription for new reminders
     console.log('👂 Setting up real-time subscription for reminders...');
     const subscription = supabase
       .channel('reminders-changes')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'reminders',
           filter: `caregiver_id=eq.${caregiverId}`,
         },
         (payload) => {
           console.log('🔔 Reminder changed:', payload.eventType, payload.new || payload.old);
-          // Reload reminders when any change happens
           loadUpcomingReminders();
+          if (patientId) {
+            loadMedicationAdherence();
+          }
         }
       )
       .subscribe((status) => {
         console.log('📡 Reminder subscription status:', status);
       });
 
-    // Cleanup
     return () => {
       clearInterval(interval);
       subscription.unsubscribe();
       console.log('🛑 Unsubscribed from reminders');
     };
-  }, [caregiverId]);
+  }, [caregiverId, patientId]);
 
   const loadUpcomingReminders = async () => {
     if (!caregiverId) {
@@ -218,12 +263,11 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
       setLoadingReminders(true);
       console.log('🔍 Loading reminders for caregiver:', caregiverId);
       
-      // Fetch all pending reminders for this caregiver
       const { data: allReminders, error } = await supabase
         .from('reminders')
         .select('*')
         .eq('caregiver_id', caregiverId)
-        .eq('status', 'pending') // Only fetch pending reminders
+        .eq('status', 'pending')
         .order('date', { ascending: true })
         .order('time', { ascending: true });
       
@@ -239,7 +283,6 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
         return;
       }
       
-      // Filter to get upcoming reminders (next 24 hours)
       const upcoming = ReminderHelperService.filterUpcomingReminders(allReminders, 24);
       console.log('⏰ Upcoming reminders (24h):', upcoming.length);
       
@@ -283,7 +326,6 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     });
   };
 
-  // Pan responder for modal
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -304,7 +346,6 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
   if (!fontsLoaded) return <AppLoading />;
 
-  // Show loading state while fetching caregiver info
   if (!caregiverId) {
     return (
       <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
@@ -415,7 +456,12 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
               </View>
             </CardBox>
 
-            <MedicationAdherenceCardExact />
+            {/* ✅ Updated Medication Adherence Card */}
+            <MedicationAdherenceCard 
+              values={medicationAdherence}
+              loading={loadingAdherence}
+              onRefresh={loadMedicationAdherence}
+            />
 
             <CardBox>
               <View style={styles.rowBetween}>
@@ -842,9 +888,17 @@ function ListItem({
   );
 }
 
-function MedicationAdherenceCardExact() {
+// ✅ Updated Medication Adherence Card Component
+function MedicationAdherenceCard({ 
+  values, 
+  loading,
+  onRefresh 
+}: { 
+  values: number[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const values = [85, 60, 86, 88, 40, 87, 60];
 
   const CARD_PAD = 20;
   const SVG_W = W - 26 * 2 - CARD_PAD * 2.7;
@@ -892,77 +946,97 @@ function MedicationAdherenceCardExact() {
           <Text style={med.title}>Medication Adherence</Text>
           <Text style={med.subtitle}>Last 7 days</Text>
         </View>
-        <MaterialIcons name="medication" size={24} color="#6366f1" />
+        <TouchableOpacity onPress={onRefresh} disabled={loading}>
+          <MaterialIcons 
+            name={loading ? "hourglass-empty" : "medication"} 
+            size={24} 
+            color="#6366f1" 
+          />
+        </TouchableOpacity>
       </View>
 
-      <Svg width={SVG_W} height={SVG_H} style={{ marginTop: 6 }}>
-        <Defs>
-          <SvgGradient id="barFill" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="rgba(129,140,248,0.35)" />
-            <Stop offset="1" stopColor="rgba(129,140,248,0.35)" />
-          </SvgGradient>
-        </Defs>
+      {loading ? (
+        <View style={{ height: SVG_H, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="small" color="#6366f1" />
+        </View>
+      ) : (
+        <Svg width={SVG_W} height={SVG_H} style={{ marginTop: 6 }}>
+          <Defs>
+            <SvgGradient id="barFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="rgba(129,140,248,0.35)" />
+              <Stop offset="1" stopColor="rgba(129,140,248,0.35)" />
+            </SvgGradient>
+          </Defs>
 
-        {[{ v: 100, label: "100%" }, { v: 50, label: "50%" }, { v: 0, label: "0%" }].map(
-          (t, i) => (
-            <SvgText
+          {[{ v: 100, label: "100%" }, { v: 50, label: "50%" }, { v: 0, label: "0%" }].map(
+            (t, i) => (
+              <SvgText
+                key={i}
+                x={0}
+                y={yPos(t.v) + 3}
+                fill="#64748b"
+                fontSize={10}
+                fontFamily="Poppins_500Medium"
+              >
+                {t.label}
+              </SvgText>
+            )
+          )}
+
+          <SvgLine x1={LEFT} y1={TOP} x2={LEFT} y2={TOP + PLOT_H} stroke="#E6EBFF" strokeWidth={1} />
+          {[0, 50, 100].map((v, i) => (
+            <SvgLine
               key={i}
-              x={0}
-              y={yPos(t.v) + 3}
-              fill="#64748b"
-              fontSize={10}
-              fontFamily="Poppins_500Medium"
-            >
-              {t.label}
-            </SvgText>
-          )
-        )}
-
-        <SvgLine x1={LEFT} y1={TOP} x2={LEFT} y2={TOP + PLOT_H} stroke="#E6EBFF" strokeWidth={1} />
-        {[0, 50, 100].map((v, i) => (
-          <SvgLine
-            key={i}
-            x1={LEFT}
-            y1={yPos(v)}
-            x2={GRID_END}
-            y2={yPos(v)}
-            stroke="#E6EBFF"
-            strokeWidth={1}
-          />
-        ))}
-
-        {values.map((val, i) => {
-          const h = (val / Y_MAX) * PLOT_H;
-          const x = LEFT + BAR_OFFSET + i * (BAR_W + GAP);
-          const y = TOP + (PLOT_H - h);
-          return (
-            <Path
-              key={i}
-              d={barPath(x, y, BAR_W, h, R)}
-              fill="rgba(179,186,251,0.5)"
-              stroke="#7073F2"
+              x1={LEFT}
+              y1={yPos(v)}
+              x2={GRID_END}
+              y2={yPos(v)}
+              stroke="#E6EBFF"
               strokeWidth={1}
             />
-          );
-        })}
+          ))}
 
-        {days.map((d, i) => {
-          const x = LEFT + BAR_OFFSET + i * (BAR_W + GAP) + BAR_W / 2;
-          return (
-            <SvgText
-              key={d}
-              x={x}
-              y={SVG_H - 7}
-              textAnchor="middle"
-              fill="#64748b"
-              fontSize={12}
-              fontFamily="Poppins_500Medium"
-            >
-              {d}
-            </SvgText>
-          );
-        })}
-      </Svg>
+          {values.map((val, i) => {
+            const h = (val / Y_MAX) * PLOT_H;
+            const x = LEFT + BAR_OFFSET + i * (BAR_W + GAP);
+            const y = TOP + (PLOT_H - h);
+            return (
+              <Path
+                key={i}
+                d={barPath(x, y, BAR_W, h, R)}
+                fill="rgba(179,186,251,0.5)"
+                stroke="#7073F2"
+                strokeWidth={1}
+              />
+            );
+          })}
+
+          {days.map((d, i) => {
+            const x = LEFT + BAR_OFFSET + i * (BAR_W + GAP) + BAR_W / 2;
+            
+            // ✅ Determine if this is today
+            const today = new Date();
+            const currentDayOfWeek = today.getDay();
+            const todayIndex = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1; // 0=Mon, 6=Sun
+            const isToday = i === todayIndex;
+            
+            return (
+              <SvgText
+                key={d}
+                x={x}
+                y={SVG_H - 7}
+                textAnchor="middle"
+                fill={isToday ? "#6366f1" : "#64748b"}
+                fontSize={12}
+                fontFamily="Poppins_500Medium"
+                fontWeight={isToday ? "700" : "500"}
+              >
+                {d}
+              </SvgText>
+            );
+          })}
+        </Svg>
+      )}
     </View>
   );
 }
