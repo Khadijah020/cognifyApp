@@ -19,10 +19,11 @@ import {
 } from 'react-native';
 
 import { RootStackParamList } from '../app/App';
-import HealthDataService from '../services/HealthDataService';
 import FallDetectionService from "../services/FallDetectionService";
+import HealthDataService from '../services/HealthDataService';
 
 
+import FaceRecognitionService from '@/services/FaceRecognitionService';
 import {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -118,7 +119,7 @@ useEffect(() => {
 
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get('https://fac1b4de43f0.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
+      const res = await axios.get('https://1761fd653587.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
       const reminders = res.data.reminders || [];
 
       if (reminders.length > 0) {
@@ -138,6 +139,49 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, [contextualRemindersEnabled, voiceAlertsEnabled]);
+
+/* ---------------- Start Face Recognition Service ---------------- */
+useEffect(() => {
+  // Start face recognition service
+  FaceRecognitionService.start(voiceAlertsEnabled);
+
+  return () => FaceRecognitionService.stop();
+}, [voiceAlertsEnabled]);
+
+
+
+
+/* ---------------- Poll for face recognitions ---------------- */
+useEffect(() => {
+  const interval = setInterval(async () => {
+    try {
+      const res = await axios.get('https://1761fd653587.ngrok-free.app/get_face_recognitions');
+      const faces = res.data.faces || [];
+
+      if (faces.length > 0) {
+        for (const face of faces) {
+          const message = `Hello! ${face.name}, your ${face.relationship}, is here.`;
+          
+          // Speak it out loud
+          if (voiceAlertsEnabled) {
+            Speech.speak(message, {
+              language: 'en-US',
+              pitch: 1.0,
+              rate: 0.9,
+            });
+          }
+          
+          // Optional: Show in recent activity
+          console.log(`👤 Face recognized: ${face.name}`);
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching face recognitions:', err);
+    }
+  }, 3000); // Poll every 3 seconds
+
+  return () => clearInterval(interval);
+}, [voiceAlertsEnabled]);
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
