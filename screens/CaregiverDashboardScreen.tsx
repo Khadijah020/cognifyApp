@@ -1,4 +1,4 @@
-// screens/CaregiverDashboardScreen.tsx - PART 1 (Imports and Types)
+// screens/CaregiverDashboardScreen.tsx - COMPLETE WITH DYNAMIC RECENT ACTIVITY
 
 import {
   SafeAreaView,
@@ -46,6 +46,8 @@ import { supabase } from "../src/lib/supabase";
 import ReminderHelperService from "../services/ReminderHelperService";
 import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import * as CaregiverService from "../services/CaregiverService";
+import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
+import CognitionLevelService, { CognitionScore } from "../services/CognitionLevelService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -103,6 +105,15 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [weeklyAdherence, setWeeklyAdherence] = useState(0);
   const [loadingWeeklyAdherence, setLoadingWeeklyAdherence] = useState(true);
 
+  /* ✅ Recent activities state */
+  const [recentActivities, setRecentActivities] = useState<PatientActivity[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(true);
+
+  /* ✅ Cognition level state */
+  const [cognitionScore, setCognitionScore] = useState<CognitionScore | null>(null);
+  const [loadingCognition, setLoadingCognition] = useState(true);
+  const [showDisclaimerModal, setShowDisclaimerModal] = useState(false);
+
   // ✅ Fetch caregiver ID from auth session on mount
   useEffect(() => {
     const initializeCaregiver = async () => {
@@ -145,10 +156,12 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     FallAlertListener.startListening(caregiverId, (newAlert: any) => {
       console.log("📩 Fall alert received:", newAlert);
       setAlert(newAlert);
+      // Refresh activities when fall is detected
+      if (patientId) loadRecentActivities();
     });
 
     return () => FallAlertListener.stopListening();
-  }, [caregiverId]);
+  }, [caregiverId, patientId]);
 
   // ✅ Load medication adherence when patient ID is available
   useEffect(() => {
@@ -177,6 +190,30 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     
     // Refresh weekly adherence every 10 minutes
     const interval = setInterval(loadWeeklyAdherence, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  // ✅ Load recent activities when patient ID is available
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadRecentActivities();
+    
+    // Refresh activities every 2 minutes
+    const interval = setInterval(loadRecentActivities, 2 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  // ✅ Load cognition level when patient ID is available
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadCognitionLevel();
+    
+    // Refresh cognition level every 10 minutes
+    const interval = setInterval(loadCognitionLevel, 10 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [patientId]);
@@ -215,12 +252,50 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
       setMedicationAdherence(weeklyData);
       console.log('✅ Medication adherence loaded:', weeklyData);
       
-      // ✅ Also refresh weekly percentage
+      // ✅ Also refresh weekly percentage and activities
       loadWeeklyAdherence();
+      loadRecentActivities();
+      loadCognitionLevel(); // Refresh cognition when medication data changes
     } catch (error) {
       console.error('❌ Error loading medication adherence:', error);
     } finally {
       setLoadingAdherence(false);
+    }
+  };
+
+  const loadRecentActivities = async () => {
+    if (!patientId) return;
+
+    try {
+      setLoadingActivities(true);
+      console.log('📋 Loading recent activities for patient:', patientId);
+      
+      const activities = await PatientActivityService.getRecentActivities(patientId, 10);
+      
+      setRecentActivities(activities);
+      console.log('✅ Loaded', activities.length, 'recent activities');
+    } catch (error) {
+      console.error('❌ Error loading recent activities:', error);
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
+
+  const loadCognitionLevel = async () => {
+    if (!patientId) return;
+
+    try {
+      setLoadingCognition(true);
+      console.log('🧠 Loading cognition level for patient:', patientId);
+      
+      const score = await CognitionLevelService.calculateCognitionLevel(patientId);
+      
+      setCognitionScore(score);
+      console.log('✅ Cognition level loaded:', score.level, score.score);
+    } catch (error) {
+      console.error('❌ Error loading cognition level:', error);
+    } finally {
+      setLoadingCognition(false);
     }
   };
 
@@ -232,6 +307,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
         loadUpcomingReminders();
         if (patientId) {
           loadMedicationAdherence();
+          loadRecentActivities();
+          loadCognitionLevel();
         }
       }
     });
@@ -274,6 +351,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
           loadUpcomingReminders();
           if (patientId) {
             loadMedicationAdherence();
+            loadRecentActivities();
+            loadCognitionLevel();
           }
         }
       )
@@ -500,19 +579,87 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
             <CardBox>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Cognition Level</Text>
-                <Text style={styles.badge}>Good</Text>
-              </View>
-              <ScaleBar />
-              <View style={styles.scaleLabels}>
-                {["Severe", "Moderate", "Mild", "Good", "Excellent"].map(
-                  (label) => (
-                    <Text key={label} style={styles.scaleText}>
-                      {label}
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                  onPress={() => setShowDisclaimerModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.cardTitle}>Cognition Level</Text>
+                  <MaterialIcons 
+                    name="info-outline" 
+                    size={18} 
+                    color="#6366f1" 
+                    style={{ marginTop: -6 }}  // ← Add this to move icon up
+                  />
+                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {cognitionScore && (
+                    <Text 
+                      style={[
+                        styles.badge, 
+                        { 
+                          color: CognitionLevelService.getCognitionColor(cognitionScore.level).text,
+                          backgroundColor: CognitionLevelService.getCognitionColor(cognitionScore.level).background,
+                        }
+                      ]}
+                    >
+                      {cognitionScore.level}
                     </Text>
-                  )
-                )}
+                  )}
+                  <TouchableOpacity onPress={loadCognitionLevel} disabled={loadingCognition}>
+                    <MaterialIcons 
+                      name={loadingCognition ? "hourglass-empty" : "refresh"} 
+                      size={20} 
+                      color="#6366f1" 
+                      style={{ marginTop: -5 }}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
+              {loadingCognition ? (
+                <View style={{ height: 100, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#6366f1" />
+                </View>
+              ) : cognitionScore ? (
+                <>
+                  <ScaleBar position={cognitionScore.position} />
+                  <View style={styles.scaleLabels}>
+                    {["Severe", "Moderate", "Mild", "Good", "Excellent"].map(
+                      (label) => (
+                        <Text key={label} style={styles.scaleText}>
+                          {label}
+                        </Text>
+                      )
+                    )}
+                  </View>
+                  
+                  {/* Additional Info */}
+                  <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                    <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 13, color: '#64748b', lineHeight: 20 }}>
+                      {CognitionLevelService.getCognitionDescription(cognitionScore.level)}
+                    </Text>
+                    
+                    <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      <View style={styles.statPill}>
+                        <Text style={styles.statPillLabel}>Medication</Text>
+                        <Text style={styles.statPillValue}>{cognitionScore.factors.medicationAdherence}%</Text>
+                      </View>
+                      <View style={styles.statPill}>
+                        <Text style={styles.statPillLabel}>Falls</Text>
+                        <Text style={styles.statPillValue}>{cognitionScore.details.fallCount}</Text>
+                      </View>
+                      <View style={styles.statPill}>
+                        <Text style={styles.statPillLabel}>Score</Text>
+                        <Text style={styles.statPillValue}>{cognitionScore.score}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 14, color: '#94a3b8', marginTop: 12 }}>
+                  No cognition data available
+                </Text>
+              )}
             </CardBox>
 
             <CardBox>
@@ -525,6 +672,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                     name={loadingWeeklyAdherence ? "hourglass-empty" : "refresh"} 
                     size={20} 
                     color="#6366f1" 
+                    style={{ marginTop: -6 }}
                   />
                 </TouchableOpacity>
               </View>
@@ -543,7 +691,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
             <Text style={styles.sectionTitle}>Upcoming Reminders (24h)</Text>
             <TouchableOpacity 
               onPress={loadUpcomingReminders}
-              style={{ paddingRight: 20, paddingTop: 17 }}
+              style={{ paddingRight: 20, paddingTop: 17 , marginLeft: -4 }}
             >
               <MaterialIcons name="refresh" size={24} color="#6366f1" />
             </TouchableOpacity>
@@ -577,23 +725,47 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
             )}
           </View>
 
-          {/* Recent Activity */}
-          <SectionTitle title="Recent Activity" />
+          {/* ✅ Recent Activity - NOW WITH DYNAMIC DATA */}
+          <View style={{ flexDirection: 'row', marginBottom: 2, alignItems: 'center' }}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <TouchableOpacity 
+              onPress={loadRecentActivities}
+              style={{ paddingRight: 20, paddingTop: 6, marginLeft: 114 }}
+              disabled={loadingActivities}
+            >
+              <MaterialIcons 
+                name={loadingActivities ? "hourglass-empty" : "refresh"} 
+                size={24} 
+                color="#6366f1" 
+              />
+            </TouchableOpacity>
+          </View>
           <View style={{ paddingHorizontal: 24 }}>
-            <ListItem
-              title="Played 'Memory Lane'"
-              subtitle="15 mins ago"
-              icon="videogame-asset"
-              color="#a855f7"
-              bg="#f3e8ff"
-            />
-            <ListItem
-              title="Afternoon medication taken"
-              subtitle="1 hour ago"
-              icon="check-circle"
-              color="#22c55e"
-              bg="#dcfce7"
-            />
+            {loadingActivities ? (
+              <View style={styles.emptyStateCard}>
+                <ActivityIndicator size="large" color="#6366f1" />
+                <Text style={styles.emptyStateTitle}>Loading activities...</Text>
+              </View>
+            ) : recentActivities.length > 0 ? (
+              recentActivities.map((activity) => (
+                <ListItem
+                  key={activity.id}
+                  title={activity.title}
+                  subtitle={activity.subtitle}
+                  icon={activity.icon}
+                  color={activity.iconColor}
+                  bg={activity.iconBg}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateCard}>
+                <MaterialIcons name="history" size={48} color="#94a3b8" />
+                <Text style={styles.emptyStateTitle}>No Recent Activity</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Patient activities will appear here
+                </Text>
+              </View>
+            )}
           </View>
         </ScrollView>
 
@@ -843,6 +1015,72 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
             </Animated.View>
           </View>
         </Modal>
+
+        {/* ✅ Disclaimer Modal */}
+        <Modal
+          visible={showDisclaimerModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDisclaimerModal(false)}
+        >
+          <View style={disclaimerModalStyles.overlay}>
+            <TouchableOpacity
+              style={disclaimerModalStyles.backdrop}
+              activeOpacity={1}
+              onPress={() => setShowDisclaimerModal(false)}
+            />
+            
+            <View style={disclaimerModalStyles.modalContainer}>
+              <LinearGradient
+                colors={["#fef3c7", "#fde68a"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={disclaimerModalStyles.modal}
+              >
+                {/* Handle Bar */}
+                <View style={disclaimerModalStyles.handleBar} />
+                
+                {/* Scrollable Content */}
+                <ScrollView 
+                  showsVerticalScrollIndicator={true}
+                  contentContainerStyle={disclaimerModalStyles.scrollContent}
+                  bounces={false}
+                >
+                  {/* Icon */}
+                  <View style={disclaimerModalStyles.iconCircle}>
+                    <MaterialIcons name="info-outline" size={40} color="#d97706" />
+                  </View>
+                  
+                  {/* Title */}
+                  <Text style={disclaimerModalStyles.title}>Important Notice</Text>
+                  
+                  {/* Disclaimer Text */}
+                  <Text style={disclaimerModalStyles.disclaimerText}>
+                    The following cognition assessment is <Text style={{ fontFamily: 'Poppins_600SemiBold' }}>not a medical diagnosis</Text>. 
+                    It is a general evaluation based on the patient's activity records, medication adherence, and safety incidents.
+                  </Text>
+                  
+                  {/* Additional Info */}
+                  <View style={disclaimerModalStyles.infoBox}>
+                    <Text style={disclaimerModalStyles.infoText}>
+                      This tool provides insights to help caregivers monitor patient wellbeing. 
+                      Always consult healthcare professionals for medical advice, diagnosis, or treatment.
+                    </Text>
+                  </View>
+                  
+                  {/* Close Button */}
+                  <TouchableOpacity
+                    style={disclaimerModalStyles.closeButton}
+                    onPress={() => setShowDisclaimerModal(false)}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={disclaimerModalStyles.closeButtonText}>I Understand</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </LinearGradient>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -931,9 +1169,7 @@ function ListItem({
         <Text style={{ fontFamily: "Poppins_600SemiBold", color: "#22c55e" }}>
           {extra}
         </Text>
-      ) : (
-        <MaterialIcons name="chevron-right" size={22} color="#94a3b8" />
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1064,10 +1300,9 @@ function MedicationAdherenceCard({
           {days.map((d, i) => {
             const x = LEFT + BAR_OFFSET + i * (BAR_W + GAP) + BAR_W / 2;
             
-            // ✅ Determine if this is today
             const today = new Date();
             const currentDayOfWeek = today.getDay();
-            const todayIndex = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1; // 0=Mon, 6=Sun
+            const todayIndex = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
             const isToday = i === todayIndex;
             
             return (
@@ -1129,7 +1364,7 @@ function Ring({ percent }: { percent: number }) {
   );
 }
 
-function ScaleBar() {
+function ScaleBar({ position = 3 }: { position?: number }) {
   const BAR_W = W - 80;
   const BAR_H = 14;
   const R = BAR_H / 2;
@@ -1137,7 +1372,9 @@ function ScaleBar() {
   const GAP = 6;
   const segW = (BAR_W - GAP * (SEG - 1)) / SEG;
   const segX = (i: number) => i * (segW + GAP);
-  const markerLeft = segX(3) - 12;
+  
+  // Calculate marker position based on cognition level (0-4)
+  const markerLeft = segX(position) + segW / 2 - 12;
 
   const leftRoundedPath = (x: number, y: number, w: number, h: number, r: number) =>
     [
@@ -1388,6 +1625,121 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 14,
     textAlign: 'center',
+  },
+  statPill: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statPillLabel: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 11,
+    color: '#64748b',
+  },
+  statPillValue: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 12,
+    color: '#334155',
+  },
+});
+
+const disclaimerModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalContainer: {
+    maxHeight: '80%',
+  },
+  modal: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scrollContent: {
+    paddingHorizontal: 28,
+    paddingBottom: 28,
+    flexGrow: 1,
+  },
+  handleBar: {
+    width: 48,
+    height: 5,
+    backgroundColor: 'rgba(217, 119, 6, 0.3)',
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(217, 119, 6, 0.3)',
+  },
+  title: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 24,
+    color: '#78350f',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  disclaimerText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    color: '#78350f',
+    lineHeight: 26,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  infoBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.2)',
+  },
+  infoText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    color: '#92400e',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  closeButton: {
+    backgroundColor: '#f59e0b',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 8,
+  },
+  closeButtonText: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 17,
+    color: '#fff',
   },
 });
 
