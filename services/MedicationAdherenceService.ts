@@ -38,7 +38,7 @@ class MedicationAdherenceService {
         const timeDiff = now.getTime() - reminderDateTime.getTime();
         
         // If more than 5 minutes (300,000 ms) past the reminder time
-        if (timeDiff > 300000) {
+        if (timeDiff > 30000) {
           remindersToMark.push(reminder.id);
           console.log(`⏰ Marking reminder as missed: ${reminder.title} (${reminder.id})`);
         }
