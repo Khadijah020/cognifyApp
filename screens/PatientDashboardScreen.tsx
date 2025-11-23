@@ -375,7 +375,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get('https://032497d116ac.ngrok-free.app/get_reminders');
+        const res = await axios.get('https://a0e212567277.ngrok-free.app/get_reminders');
         const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {

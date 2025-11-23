@@ -100,6 +100,9 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [medicationAdherence, setMedicationAdherence] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [loadingAdherence, setLoadingAdherence] = useState(true);
 
+  const [weeklyAdherence, setWeeklyAdherence] = useState(0);
+  const [loadingWeeklyAdherence, setLoadingWeeklyAdherence] = useState(true);
+
   // ✅ Fetch caregiver ID from auth session on mount
   useEffect(() => {
     const initializeCaregiver = async () => {
@@ -167,6 +170,35 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     };
   }, [patientId]);
 
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadWeeklyAdherence();
+    
+    // Refresh weekly adherence every 10 minutes
+    const interval = setInterval(loadWeeklyAdherence, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  const loadWeeklyAdherence = async () => {
+    if (!patientId) return;
+
+    try {
+      setLoadingWeeklyAdherence(true);
+      console.log('📊 Loading weekly adherence for patient:', patientId);
+      
+      const percentage = await MedicationAdherenceService.getWeeklyAdherencePercentage(patientId);
+      
+      setWeeklyAdherence(percentage);
+      console.log('✅ Weekly adherence loaded:', percentage + '%');
+    } catch (error) {
+      console.error('❌ Error loading weekly adherence:', error);
+    } finally {
+      setLoadingWeeklyAdherence(false);
+    }
+  };
+
   const loadMedicationAdherence = async () => {
     if (!patientId) return;
 
@@ -182,6 +214,9 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
       
       setMedicationAdherence(weeklyData);
       console.log('✅ Medication adherence loaded:', weeklyData);
+      
+      // ✅ Also refresh weekly percentage
+      loadWeeklyAdherence();
     } catch (error) {
       console.error('❌ Error loading medication adherence:', error);
     } finally {
@@ -481,10 +516,25 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
             </CardBox>
 
             <CardBox>
-              <Text style={[styles.cardTitle, { textAlign: "center" }]}>
-                Weekly Adherence
-              </Text>
-              <Ring percent={92} />
+              <View style={styles.rowBetween}>
+                <Text style={[styles.cardTitle, { textAlign: "center", flex: 1 }]}>
+                  Weekly Adherence
+                </Text>
+                <TouchableOpacity onPress={loadWeeklyAdherence} disabled={loadingWeeklyAdherence}>
+                  <MaterialIcons 
+                    name={loadingWeeklyAdherence ? "hourglass-empty" : "refresh"} 
+                    size={20} 
+                    color="#6366f1" 
+                  />
+                </TouchableOpacity>
+              </View>
+              {loadingWeeklyAdherence ? (
+                <View style={{ height: 200, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#6366f1" />
+                </View>
+              ) : (
+                <Ring percent={weeklyAdherence} />
+              )}
             </CardBox>
           </View>
 
