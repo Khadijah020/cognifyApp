@@ -377,7 +377,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get('https://3be3dc176e4c.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
+      const res = await axios.get('https://abfd99497a40.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
       const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {
@@ -413,7 +413,7 @@ useEffect(() => {
 useEffect(() => {
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get('https://3be3dc176e4c.ngrok-free.app/get_face_recognitions');
+      const res = await axios.get('https://abfd99497a40.ngrok-free.app/get_face_recognitions');
       const faces = res.data.faces || [];
 
       if (faces.length > 0) {
