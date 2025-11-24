@@ -1,7 +1,9 @@
+// services/FaceRecognitionService.ts
+
 import axios from 'axios';
 import * as Speech from 'expo-speech';
 
-const BACKEND_URL = 'https://abfd99497a40.ngrok-free.app';
+const BACKEND_URL = 'https://1bf760273912.ngrok-free.app';
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 

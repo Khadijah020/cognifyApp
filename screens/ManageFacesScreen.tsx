@@ -1,4 +1,4 @@
-// ManageFacesScreen.tsx - Fixed version
+// screens/ManageFacesScreen.tsx - Fixed version
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -48,7 +48,7 @@ type NewPersonData = {
 };
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const API_URL = 'https://abfd99497a40.ngrok-free.app';
+const API_URL = 'https://1bf760273912.ngrok-free.app';
 const INDIGO = '#6366f1';
 const BG_FROM = '#f0f4ff';
 
