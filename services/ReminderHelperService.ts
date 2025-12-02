@@ -33,6 +33,7 @@ export type ReminderData = {
     label?: string;
   };
   prefill?: {
+    id?: string;
     title: string;
     date: Date;
     timeText: string;
@@ -45,8 +46,18 @@ class ReminderHelperService {
    */
   parseReminderDateTime(dateStr: string, timeStr: string): Date {
     try {
-      // Parse the date (expecting ISO format like "2025-01-15" or "2025-01-15T00:00:00")
-      const date = new Date(dateStr);
+      // Parse the date - handle timezone correctly
+      // If dateStr is "2025-12-02", we need to parse it as LOCAL date, not UTC
+      let year: number, month: number, day: number;
+      
+      if (dateStr.includes('T')) {
+        // ISO format with time - extract just the date part
+        const datePart = dateStr.split('T')[0];
+        [year, month, day] = datePart.split('-').map(Number);
+      } else {
+        // Simple date format "2025-12-02"
+        [year, month, day] = dateStr.split('-').map(Number);
+      }
       
       // Parse time - handle multiple formats
       const timeUpper = timeStr.toUpperCase().trim();
@@ -76,8 +87,8 @@ class ReminderHelperService {
         minutes = parseInt(parts[1] || '0', 10);
       }
       
-      // Set the time on the date
-      date.setHours(hours, minutes, 0, 0);
+      // Create date with LOCAL timezone (month is 0-indexed)
+      const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
       
       console.log('📅 Parsed:', dateStr, timeStr, '→', date.toLocaleString(), '(', date.toISOString(), ')');
       return date;
@@ -164,6 +175,7 @@ class ReminderHelperService {
         label: r.status === 'completed' ? 'Confirmed' : 'Scheduled',
       },
       prefill: {
+        id: r.id,
         title: r.title,
         date: reminderDate,
         timeText: r.time,

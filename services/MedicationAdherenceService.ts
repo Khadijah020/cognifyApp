@@ -71,6 +71,16 @@ class MedicationAdherenceService {
    * Parse reminder date and time into a Date object
    */
   private parseReminderDateTime(dateStr: string, timeStr: string): Date {
+    // Parse date as LOCAL time, not UTC
+    let year: number, month: number, day: number;
+    
+    if (dateStr.includes('T')) {
+      const datePart = dateStr.split('T')[0];
+      [year, month, day] = datePart.split('-').map(Number);
+    } else {
+      [year, month, day] = dateStr.split('-').map(Number);
+    }
+
     const [timePart, period] = timeStr.includes(' ')
       ? timeStr.split(' ')
       : [timeStr, ''];
@@ -82,8 +92,8 @@ class MedicationAdherenceService {
     if (period.toUpperCase() === 'PM' && hour !== 12) hour += 12;
     if (period.toUpperCase() === 'AM' && hour === 12) hour = 0;
 
-    const reminderDate = new Date(dateStr);
-    reminderDate.setHours(hour, minutes, 0, 0);
+    // Create date with LOCAL timezone (month is 0-indexed)
+    const reminderDate = new Date(year, month - 1, day, hour, minutes, 0, 0);
 
     return reminderDate;
   }

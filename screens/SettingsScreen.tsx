@@ -1,28 +1,29 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../src/lib/supabase';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -128,6 +129,12 @@ interface PatientInfo {
   dementia_stage: string;
 }
 
+interface CaregiverInfo {
+  full_name: string;
+  email: string;
+  phone: string;
+}
+
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const { isDark, toggleTheme } = useTheme();
 
@@ -143,6 +150,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [patientLoading, setPatientLoading] = useState(true);
   const [hasPatient, setHasPatient] = useState(false);
+  const [caregiver, setCaregiver] = useState<CaregiverInfo | null>(null);
 
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerY = useRef(new Animated.Value(-50)).current;
@@ -159,8 +167,46 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    fetchCaregiverInfo();
     fetchPatientInfo();
   }, []);
+
+  // Refresh caregiver info when the screen comes into focus (e.g., after editing profile)
+  useFocusEffect(
+    useCallback(() => {
+      fetchCaregiverInfo();
+      fetchPatientInfo();
+    }, [])
+  );
+
+  const fetchCaregiverInfo = async () => {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.warn('No user session found');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('caregivers')
+        .select('full_name, email, phone')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching caregiver:', error.message);
+        return;
+      }
+
+      setCaregiver({
+        full_name: data.full_name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+      });
+    } catch (err) {
+      console.error('Unexpected error fetching caregiver:', err);
+    }
+  };
 
   const fetchPatientInfo = async () => {
     setPatientLoading(true);
@@ -245,11 +291,20 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       >
         <View style={styles.profileCard} onTouchEnd={() => navigation.navigate('EditCaregiverProfile')}>
           <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>EC</Text>
+            <Text style={styles.profileAvatarText}>
+              {caregiver?.full_name
+                ? caregiver.full_name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'NA'}
+            </Text>
           </View>
           <View style={{ marginLeft: 14, flex: 1 }}>
-            <Text style={styles.profileName}>Emily Carter</Text>
-            <Text style={styles.profileEmail}>emily.carter@example.com</Text>
+            <Text style={styles.profileName}>{caregiver?.full_name || 'Loading...'}</Text>
+            <Text style={styles.profileEmail}>{caregiver?.email || ''}</Text>
           </View>
           <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
         </View>

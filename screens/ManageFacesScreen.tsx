@@ -7,28 +7,29 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../app/App';
+import { ApiService } from '../services/ApiService';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManageFaces'>;
@@ -48,7 +49,6 @@ type NewPersonData = {
 };
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const API_URL = 'https://1bf760273912.ngrok-free.app';
 const INDIGO = '#6366f1';
 const BG_FROM = '#f0f4ff';
 
@@ -202,9 +202,12 @@ export default function ManageFacesScreen({ navigation }: Props) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${API_URL}/health`, {
+      const response = await fetch(ApiService.getApiEndpoint('/health'), {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -260,14 +263,15 @@ export default function ManageFacesScreen({ navigation }: Props) {
         image: imageBase64,
       };
 
-      console.log('📤 Sending payload to:', `${API_URL}/register_face`);
+      console.log('📤 Sending payload to:', ApiService.getApiEndpoint('/register_face'));
       console.log('📦 Payload keys:', Object.keys(payload));
       console.log('📊 Payload sizes - id:', payload.id.length, 'name:', payload.name.length, 'relationship:', payload.relationship.length, 'image:', payload.image.length);
 
-      const response = await fetch(`${API_URL}/register_face`, {
+      const response = await fetch(ApiService.getApiEndpoint('/register_face'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify(payload),
       });
@@ -407,8 +411,11 @@ export default function ManageFacesScreen({ navigation }: Props) {
 
           if (backendConnected) {
             try {
-              await fetch(`${API_URL}/delete_face/${face.id}`, {
+              await fetch(ApiService.getApiEndpoint(`/delete_face/${face.id}`), {
                 method: 'DELETE',
+                headers: {
+                  'ngrok-skip-browser-warning': 'true',
+                },
               });
             } catch (error) {
               console.error('Delete from backend failed:', error);

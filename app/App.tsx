@@ -21,6 +21,7 @@ import LoginScreen from "../screens/LoginScreen";
 import PatientDetailsScreen from "../screens/PatientDetailsScreen";
 import PatientLocationScreen from "../screens/PatientLocationScreen";
 import SignupScreen from "../screens/SignupScreen";
+import { ApiService } from "../services/ApiService";
 import { supabase } from "../src/lib/supabase";
 
 export type RootStackParamList = {
@@ -29,7 +30,7 @@ export type RootStackParamList = {
   CaregiverDashboard: undefined;
   PatientDetails: undefined;
   EditPatientDetails: undefined;
-  PatientLocation: undefined;
+  PatientLocation: { patientName?: string } | undefined;
   Settings: undefined;
   ManageFaces: undefined;
   ChangeEmail: undefined;
@@ -41,6 +42,7 @@ export type RootStackParamList = {
   ApiConfiguration: undefined;
   AddReminder: {
     patientId: string;
+    reminderId?: string;
     prefill?: {
       title?: string;
       date?: Date;
@@ -61,6 +63,9 @@ useEffect(() => {
   
   const checkLogin = async () => {
     try {
+      // Initialize ApiService with saved ngrok URL
+      await ApiService.initialize();
+      
       const { data: { session }, error } = await supabase.auth.getSession();
             
       if (error) {

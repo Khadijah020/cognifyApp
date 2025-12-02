@@ -1,25 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { RootStackParamList } from '../app/App';
 import { ApiService } from '../services/ApiService';
 
 import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ApiConfiguration'>;
@@ -58,7 +58,8 @@ export default function ApiConfigurationScreen({ navigation }: Props) {
 
   const loadSavedUrl = async () => {
     try {
-      const url = await ApiService.getNgrokUrl();
+      const url = await ApiService.getNgrokUrlAsync();
+      console.log('📡 Loaded ngrok URL:', url);
       if (url) {
         setNgrokUrl(url);
       }
@@ -192,6 +193,54 @@ export default function ApiConfigurationScreen({ navigation }: Props) {
             <Text style={styles.clearBtnText}>Clear Saved URL</Text>
           </TouchableOpacity>
         ) : null}
+
+        {/* Test Connection Button */}
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: '#22c55e', marginTop: 12 }]}
+          onPress={async () => {
+            try {
+              const testUrl = ngrokUrl.trim() || ApiService.getNgrokUrl();
+              console.log('🧪 Testing connection to:', testUrl);
+              
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
+              
+              const response = await fetch(`${testUrl}/health`, {
+                method: 'GET',
+                headers: {
+                  'ngrok-skip-browser-warning': 'true', // Skip ngrok interstitial page
+                  'Content-Type': 'application/json',
+                },
+                signal: controller.signal,
+              });
+              clearTimeout(timeoutId);
+              
+              const text = await response.text();
+              console.log('📡 Response:', text);
+              
+              // Check if it's HTML (ngrok error page or server error)
+              if (text.startsWith('<!') || text.startsWith('<html')) {
+                Alert.alert('⚠️ Backend Not Ready', 
+                  'Received HTML instead of JSON.\n\nThis usually means:\n1. Your backend server is not running\n2. The /health endpoint doesn\'t exist\n\nMake sure your Flask/backend is running with a /health route.');
+                return;
+              }
+              
+              try {
+                const data = JSON.parse(text);
+                Alert.alert('✅ Connection Successful!', `Backend Status: ${data.status || 'OK'}\n\nURL: ${testUrl}`);
+              } catch {
+                Alert.alert('✅ Server Responded', `Got response from server:\n\n${text.substring(0, 100)}...`);
+              }
+            } catch (error: any) {
+              console.error('❌ Connection test failed:', error);
+              Alert.alert('❌ Connection Failed', `Could not connect to backend.\n\nError: ${error.message}\n\nMake sure:\n1. Your ngrok is running\n2. The URL is correct\n3. Your backend server is running`);
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="wifi" size={20} color={C.white} />
+          <Text style={styles.saveBtnText}>Test Connection</Text>
+        </TouchableOpacity>
 
         {/* Instructions */}
         <View style={styles.instructionsCard}>

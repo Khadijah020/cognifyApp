@@ -1,26 +1,11 @@
 // screens/CaregiverDashboardScreen.tsx - COMPLETE WITH DYNAMIC RECENT ACTIVITY
 
 import {
-  SafeAreaView,
-  ScrollView,
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  Animated,
-  Alert,
-  PanResponder,
-  ActivityIndicator,
-} from "react-native";
-import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from "@expo-google-fonts/poppins";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -29,25 +14,40 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 import Svg, {
-  Circle,
-  Defs,
-  Path,
-  Rect,
-  Stop,
-  LinearGradient as SvgGradient,
-  Line as SvgLine,
-  Text as SvgText,
+    Circle,
+    Defs,
+    Path,
+    Rect,
+    Stop,
+    LinearGradient as SvgGradient,
+    Line as SvgLine,
+    Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
-import HealthDataService from "../services/HealthDataService";
-import FallAlertListener from "../services/FallAlertListener";
-import { supabase } from "../src/lib/supabase";
-import ReminderHelperService from "../services/ReminderHelperService";
-import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import * as CaregiverService from "../services/CaregiverService";
-import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
 import CognitionLevelService, { CognitionScore } from "../services/CognitionLevelService";
+import FallAlertListener from "../services/FallAlertListener";
+import HealthDataService from "../services/HealthDataService";
+import MedicationAdherenceService from "../services/MedicationAdherenceService";
+import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
+import ReminderHelperService from "../services/ReminderHelperService";
+import { supabase } from "../src/lib/supabase";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -69,6 +69,7 @@ type ReminderData = {
     label?: string;
   };
   prefill?: {
+    id?: string;
     title: string;
     date: Date;
     timeText: string;
@@ -526,7 +527,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 <GhostBtn 
                 icon="pin-drop" 
                 text="  Check Location"
-                onPress={() => navigation.navigate('PatientLocation')}  />  
+                onPress={() => navigation.navigate('PatientLocation', { patientName })}  />  
               </View>
             </LinearGradient>
           </View>
@@ -806,7 +807,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                       style={styles.puprimaryButton}
                       onPress={() => {
                         setAlert(null);
-                        navigation.navigate("PatientLocation");
+                        navigation.navigate("PatientLocation", { patientName });
                       }}
                     >
                       <MaterialIcons name="location-on" size={22} color="#e11d48" />
@@ -1358,7 +1359,7 @@ function Ring({ percent }: { percent: number }) {
       </Svg>
       <View style={[styles.ringCenter, { top: "36%" }]}>
         <Text style={[styles.ringPercent, { fontSize: 32 }]}>{clamped}%</Text>
-        <Text style={[styles.smallMuted, { marginTop: -15 }]}>Adherence</Text>
+        <Text style={[styles.smallMuted, { marginTop: 2 }]}>Adherence</Text>
       </View>
     </View>
   );

@@ -11,35 +11,36 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  Linking,
-  Modal,
-  PanResponder,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    Linking,
+    Modal,
+    PanResponder,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { ApiService } from '../services/ApiService';
 import FallDetectionService from "../services/FallDetectionService";
 import HealthDataService from '../services/HealthDataService';
 
+import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
 import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
-import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 import axios from 'axios';
 
@@ -109,7 +110,6 @@ const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const BACKEND_URL = 'https://1bf760273912.ngrok-free.app'; // ⚠️ Update this to match your backend
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -202,6 +202,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ Load local faces from storage
   useEffect(() => {
     loadLocalFaces();
+    // Refresh API service cache to get latest ngrok URL
+    ApiService.refreshCache();
   }, []);
 
   const loadLocalFaces = async () => {
@@ -491,7 +493,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get(`${BACKEND_URL}/get_reminders`);
+        const res = await axios.get(ApiService.getApiEndpoint('/get_reminders'), {
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+        });
         const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {
@@ -516,7 +520,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   useEffect(() => {
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get(`${BACKEND_URL}/get_face_recognitions`);
+      const res = await axios.get(ApiService.getApiEndpoint('/get_face_recognitions'), {
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      });
       const faces: FaceRecognitionData[] = res.data.faces || [];
 
       if (faces.length > 0) {

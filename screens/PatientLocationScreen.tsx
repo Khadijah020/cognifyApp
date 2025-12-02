@@ -1,29 +1,29 @@
 // PatientLocationScreen.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
-import * as Location from 'expo-location';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Alert,
+    Dimensions,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { RootStackParamList } from '../app/App';
 
 import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientLocation'>;
@@ -51,7 +51,10 @@ const C = {
   btnTo: '#6366f1',
 };
 
-export default function PatientLocationScreen({ navigation }: Props) {
+export default function PatientLocationScreen({ navigation, route }: Props) {
+  // Get patient name from route params, default to 'Patient' if not provided
+  const patientName = route.params?.patientName || 'Patient';
+  
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -60,7 +63,7 @@ export default function PatientLocationScreen({ navigation }: Props) {
   });
 
   const [patientInfo, setPatientInfo] = useState<PatientInfo>({
-    name: 'John Doe',
+    name: patientName,
     lastUpdated: 'updating...',
     address: 'Loading address...',
     coordinates: { latitude: 0, longitude: 0 },
@@ -95,7 +98,7 @@ export default function PatientLocationScreen({ navigation }: Props) {
           : 'Unknown location';
 
         setPatientInfo({
-          name: 'John Doe',
+          name: patientName,
           lastUpdated: 'just now',
           address: formattedAddress,
           coordinates: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },

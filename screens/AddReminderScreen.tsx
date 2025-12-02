@@ -1,29 +1,29 @@
 // AddReminderScreen.tsx
-import React, { useRef, useState } from 'react';
 import {
-  Alert,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  ActivityIndicator,
-} from 'react-native';
-import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
-import ReminderService from '../services/ReminderService';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../app/App';
-import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Notifications from 'expo-notifications';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { RootStackParamList } from '../app/App';
+import ReminderService from '../services/ReminderService';
 
 const INDIGO = '#6366f1';
 const SLATE_800 = '#1e293b';
@@ -72,7 +72,11 @@ Notifications.setNotificationHandler({
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
 
-const AddReminderScreen = ({ navigation }: Props) => {
+const AddReminderScreen = ({ navigation, route }: Props) => {
+  const prefill = route.params?.prefill;
+  const isEditing = !!prefill?.id; // Check if we're editing an existing reminder
+  const reminderId = prefill?.id;
+  
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -101,6 +105,66 @@ const AddReminderScreen = ({ navigation }: Props) => {
   const [medication, setMedication] = useState('');
   const [instructions, setInstructions] = useState('');
   const [caregiverNote, setCaregiverNote] = useState('');
+
+  // Parse time string like "09:00 AM" or "21:00:00" into hour, minute, period
+  const parseTimeString = (timeStr: string) => {
+    const upperTime = timeStr.toUpperCase().trim();
+    let hour = 9;
+    let minute = 0;
+    let period: 'AM' | 'PM' = 'AM';
+
+    if (upperTime.includes('AM') || upperTime.includes('PM')) {
+      // Format: "9:00 AM" or "09:00 PM"
+      const [timePart, periodPart] = upperTime.split(/\s+/);
+      const [h, m] = timePart.split(':');
+      hour = parseInt(h, 10);
+      minute = parseInt(m || '0', 10);
+      period = periodPart as 'AM' | 'PM';
+    } else {
+      // 24-hour format: "21:00" or "21:00:00"
+      const [h, m] = timeStr.split(':');
+      hour = parseInt(h, 10);
+      minute = parseInt(m || '0', 10);
+      
+      if (hour >= 12) {
+        period = 'PM';
+        if (hour > 12) hour -= 12;
+      } else {
+        period = 'AM';
+        if (hour === 0) hour = 12;
+      }
+    }
+
+    return { hour, minute, period };
+  };
+
+  // Prefill form when editing an existing reminder
+  useEffect(() => {
+    if (prefill) {
+      console.log('📝 Prefilling reminder form:', prefill);
+      
+      if (prefill.title) {
+        setReminderTitle(prefill.title);
+      }
+      
+      if (prefill.date) {
+        const date = new Date(prefill.date);
+        setSelectedDate(date);
+        setCurrentMonth(date.getMonth());
+        setCurrentYear(date.getFullYear());
+      }
+      
+      if (prefill.timeText) {
+        const { hour, minute, period } = parseTimeString(prefill.timeText);
+        setSelectedHour(hour);
+        setSelectedMinute(minute);
+        setSelectedPeriod(period);
+        setSliderHour(hour);
+        setSliderMinute(minute);
+        setSelectedTime(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${period}`);
+      }
+    }
+  }, [prefill]);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -229,7 +293,7 @@ const AddReminderScreen = ({ navigation }: Props) => {
       const day = String(selectedDate.getDate()).padStart(2, '0');
       const formattedDate = `${year}-${month}-${day}`;
 
-      const newReminder = {
+      const reminderData = {
         title: reminderTitle,
         time: selectedTime,
         date: formattedDate, // Use local date, not ISO string
@@ -240,19 +304,30 @@ const AddReminderScreen = ({ navigation }: Props) => {
         status: 'pending' as const,
       };
 
-      await ReminderService.saveReminder(newReminder);
-      
-      Alert.alert('Success', 'Reminder added successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
+      if (isEditing && reminderId) {
+        // Update existing reminder
+        await ReminderService.updateReminder(reminderId, reminderData);
+        Alert.alert('Success', 'Reminder updated successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      } else {
+        // Create new reminder
+        await ReminderService.saveReminder(reminderData);
+        Alert.alert('Success', 'Reminder added successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      }
     } catch (error: any) {
-      console.error('Failed to add reminder:', error);
+      console.error('Failed to save reminder:', error);
       Alert.alert(
         'Error',
-        error.message || 'Failed to add reminder. Please try again.'
+        error.message || 'Failed to save reminder. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -271,7 +346,7 @@ const AddReminderScreen = ({ navigation }: Props) => {
           <Ionicons name="chevron-back" size={24} color={SLATE_800} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Reminder</Text>
+        <Text style={styles.headerTitle}>{isEditing ? 'Edit Reminder' : 'Add Reminder'}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -411,8 +486,8 @@ const AddReminderScreen = ({ navigation }: Props) => {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <MaterialIcons name="alarm-add" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>Set Reminder</Text>
+              <MaterialIcons name={isEditing ? "edit" : "alarm-add"} size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>{isEditing ? 'Update Reminder' : 'Set Reminder'}</Text>
             </>
           )}
         </TouchableOpacity>

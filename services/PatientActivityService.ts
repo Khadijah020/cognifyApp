@@ -135,16 +135,30 @@ class PatientActivityService {
 
       if (!falls || falls.length === 0) return [];
 
-      return falls.map(f => ({
-        id: `fall-${f.id}`,
-        type: 'fall_detected',
-        title: 'Fall detected',
-        subtitle: this.formatRelativeTime(new Date(f.created_at)),
-        timestamp: new Date(f.created_at),
-        icon: 'personal-injury',
-        iconColor: '#ef4444',
-        iconBg: '#fee2e2',
-      }));
+      return falls.map(f => {
+        // Parse the timestamp - Supabase returns UTC timestamps
+        // Ensure we parse it as UTC by appending 'Z' if not present
+        let timestamp: Date;
+        const createdAt = f.created_at;
+        if (createdAt.endsWith('Z') || createdAt.includes('+')) {
+          // Already has timezone info
+          timestamp = new Date(createdAt);
+        } else {
+          // No timezone info - treat as UTC
+          timestamp = new Date(createdAt + 'Z');
+        }
+        
+        return {
+          id: `fall-${f.id}`,
+          type: 'fall_detected' as const,
+          title: 'Fall detected',
+          subtitle: this.formatRelativeTime(timestamp),
+          timestamp: timestamp,
+          icon: 'personal-injury',
+          iconColor: '#ef4444',
+          iconBg: '#fee2e2',
+        };
+      });
     } catch (error) {
       console.error('❌ Error in getFallActivities:', error);
       return [];
@@ -156,6 +170,19 @@ class PatientActivityService {
    */
   private static parseReminderDateTime(dateStr: string, timeStr: string): Date {
     try {
+      // Parse date as LOCAL time, not UTC
+      // If dateStr is "2025-12-02", we need to parse it as LOCAL date
+      let year: number, month: number, day: number;
+      
+      if (dateStr.includes('T')) {
+        // ISO format with time - extract just the date part
+        const datePart = dateStr.split('T')[0];
+        [year, month, day] = datePart.split('-').map(Number);
+      } else {
+        // Simple date format "2025-12-02"
+        [year, month, day] = dateStr.split('-').map(Number);
+      }
+
       const [timePart, period] = timeStr.includes(' ')
         ? timeStr.split(' ')
         : [timeStr, ''];
@@ -170,8 +197,8 @@ class PatientActivityService {
         if (period.toUpperCase() === 'AM' && hour === 12) hour = 0;
       }
 
-      const date = new Date(dateStr);
-      date.setHours(hour, minutes, 0, 0);
+      // Create date with LOCAL timezone (month is 0-indexed)
+      const date = new Date(year, month - 1, day, hour, minutes, 0, 0);
 
       return date;
     } catch (error) {
