@@ -8,6 +8,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppLoading from "expo-app-loading";
+import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
     Alert,
@@ -169,9 +170,12 @@ if (role === "patient") {
       }
 
       // For caregivers (or unknown emails), use Supabase reset
+      // Create the redirect URL for the app
+      const redirectUrl = Linking.createURL('reset-password');
+      console.log('Password reset redirect URL:', redirectUrl);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(mail, {
-        // If you have deep linking set up, add your redirect:
-        // redirectTo: "cognify://reset-password"
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
 
