@@ -1,9 +1,9 @@
 // src/screens/LoginScreen.tsx
 import {
-    SpaceGrotesk_400Regular,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_700Bold,
-    useFonts,
+  SpaceGrotesk_400Regular,
+  SpaceGrotesk_500Medium,
+  SpaceGrotesk_700Bold,
+  useFonts,
 } from "@expo-google-fonts/space-grotesk";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -11,14 +11,14 @@ import AppLoading from "expo-app-loading";
 import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
-    Alert,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { RootStackParamList } from "../app/App";
 import { supabase } from "../src/lib/supabase";
@@ -138,7 +138,23 @@ if (role === "patient") {
     await getRoleAndNavigate();
 
   } catch (e: any) {
-    Alert.alert("Login Error", e?.message ?? "Something went wrong.");
+    // Check for network/connection errors
+    const errorMessage = e?.message?.toLowerCase() || '';
+    if (
+      errorMessage.includes('network') ||
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('connection') ||
+      errorMessage.includes('econnrefused') ||
+      e?.name === 'TypeError' // Often indicates network failure
+    ) {
+      Alert.alert(
+        "Connection Error",
+        "Unable to connect to the server. Please check your internet connection and try again."
+      );
+    } else {
+      Alert.alert("Login Error", e?.message ?? "Something went wrong.");
+    }
   } finally {
     setSubmitting(false);
   }
