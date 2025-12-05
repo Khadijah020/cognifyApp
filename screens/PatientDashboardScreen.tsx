@@ -109,7 +109,7 @@ const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const BACKEND_URL = 'https://1bf760273912.ngrok-free.app'; // ⚠️ Update this to match your backend
+const BACKEND_URL = 'https://bfabda320daf.ngrok-free.app'; // ⚠️ Update this to match your backend
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({

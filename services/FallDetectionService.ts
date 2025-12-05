@@ -1,6 +1,6 @@
+import * as Location from "expo-location";
 import { Accelerometer } from "expo-sensors";
 import { Alert, Vibration } from "react-native";
-import * as Location from "expo-location";
 import { supabase } from "../src/lib/supabase";
 
 class FallDetectionService {
@@ -40,7 +40,7 @@ class FallDetectionService {
   ) {
     const acceleration = Math.sqrt(x * x + y * y + z * z);
 
-    const impactThreshold = 3.0;
+    const impactThreshold = 2.0;
     const stillnessMin = 0.8;
     const stillnessMax = 1.2;
     const stillness = acceleration > stillnessMin && acceleration < stillnessMax;

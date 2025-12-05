@@ -3,7 +3,7 @@
 import axios from 'axios';
 import * as Speech from 'expo-speech';
 
-const BACKEND_URL = 'https://1bf760273912.ngrok-free.app';
+const BACKEND_URL = 'https://bfabda320daf.ngrok-free.app';
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 
