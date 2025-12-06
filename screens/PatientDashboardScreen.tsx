@@ -489,10 +489,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   useEffect(() => {
     if (!contextualRemindersEnabled) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.get(`${BACKEND_URL}/get_reminders`);
-        const reminders = res.data.reminders || [];
+  const interval = setInterval(async () => {
+    try {
+      const res = await axios.get('https://3be3dc176e4c.ngrok-free.app/get_reminders'); // replace with your FastAPI ngrok URL
+      const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {
           const reminderText = reminders[0].reminder || "You have a new reminder";
@@ -516,8 +516,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   useEffect(() => {
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get(`${BACKEND_URL}/get_face_recognitions`);
-      const faces: FaceRecognitionData[] = res.data.faces || [];
+      const res = await axios.get('https://3be3dc176e4c.ngrok-free.app/get_face_recognitions');
+      const faces = res.data.faces || [];
 
       if (faces.length > 0) {
         for (const faceData of faces) {

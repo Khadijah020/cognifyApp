@@ -48,7 +48,7 @@ type NewPersonData = {
 };
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const API_URL = 'https://1bf760273912.ngrok-free.app';
+const API_URL = 'https://3be3dc176e4c.ngrok-free.app';
 const INDIGO = '#6366f1';
 const BG_FROM = '#f0f4ff';
 
