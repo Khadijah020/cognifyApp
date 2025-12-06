@@ -17,9 +17,8 @@ import {
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { RootStackParamList } from '../app/App';
-import { supabase } from '../src/lib/supabase';
-import * as CaregiverService from '../services/CaregiverService';
 import { useTheme } from '../contexts/ThemeContext';
+import * as CaregiverService from '../services/CaregiverService';
 
 import {
     Poppins_400Regular,
@@ -477,7 +476,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateY: -16 }],
   },
   pinAvatar: {
     width: 40,

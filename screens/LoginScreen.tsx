@@ -1,9 +1,9 @@
 // src/screens/LoginScreen.tsx
 import {
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_700Bold,
-  useFonts,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_700Bold,
+    useFonts,
 } from "@expo-google-fonts/space-grotesk";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -11,14 +11,14 @@ import AppLoading from "expo-app-loading";
 import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
-  Alert,
-  Platform,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { RootStackParamList } from "../app/App";
 import { supabase } from "../src/lib/supabase";
@@ -243,7 +243,7 @@ if (role === "patient") {
       </View>
 
       {/* Forgot password */}
-      <TouchableOpacity onPress={handleForgotPassword} disabled={submitting}>
+      <TouchableOpacity onPress={handleForgotPassword} disabled={submitting} style={styles.linkWrap}>
         <Text style={styles.link}>Forgot password?</Text>
       </TouchableOpacity>
 
@@ -308,6 +308,7 @@ const styles = StyleSheet.create({
   },
   fieldWrap: {
     marginBottom: Platform.OS === "ios" ? 20 : 12,
+    paddingHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   input: {
     backgroundColor: COLORS.inputBg,
@@ -317,6 +318,9 @@ const styles = StyleSheet.create({
     fontFamily: "SpaceGrotesk_400Regular",
     fontSize: 16,
     color: COLORS.text,
+  },
+  linkWrap: {
+    paddingHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   link: {
     fontFamily: "SpaceGrotesk_400Regular",

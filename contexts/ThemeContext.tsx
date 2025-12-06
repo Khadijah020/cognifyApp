@@ -1,7 +1,7 @@
 // contexts/ThemeContext.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ThemeColors = {
   background: string;

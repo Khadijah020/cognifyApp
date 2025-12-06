@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Default ngrok URL - can be overridden by user in settings
-const DEFAULT_NGROK_URL = 'https://049f11612d00.ngrok-free.app';
+const DEFAULT_NGROK_URL = 'https://70d1d402dfeb.ngrok-free.app';
 const NGROK_URL_STORAGE_KEY = 'cognify_ngrok_url';
 
 // In-memory cache for the URL (to avoid async calls every time)

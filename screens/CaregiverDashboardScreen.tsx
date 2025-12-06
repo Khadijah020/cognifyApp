@@ -40,6 +40,7 @@ import Svg, {
     Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
+import { useTheme } from "../contexts/ThemeContext";
 import * as CaregiverService from "../services/CaregiverService";
 import CognitionLevelService, { CognitionScore } from "../services/CognitionLevelService";
 import FallAlertListener from "../services/FallAlertListener";
@@ -48,7 +49,6 @@ import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
 import ReminderHelperService from "../services/ReminderHelperService";
 import { supabase } from "../src/lib/supabase";
-import { useTheme } from "../contexts/ThemeContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 

@@ -23,8 +23,8 @@ import {
     View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
-import ReminderService from '../services/ReminderService';
 import { useTheme } from '../contexts/ThemeContext';
+import ReminderService from '../services/ReminderService';
 
 const INDIGO = '#6366f1';
 const SLATE_800 = '#1e293b';
