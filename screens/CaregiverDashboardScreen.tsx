@@ -819,10 +819,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   </Text> 
                   <Text style={styles.putimestamp}>
                     {alert?.created_at
-                      ? `Timestamp: ${new Date(alert.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}, ${new Date(alert.created_at).toLocaleDateString()}`
+                      ? (() => {
+                          // Convert UTC timestamp to local time
+                          const utcDate = new Date(alert.created_at + 'Z'); // Add 'Z' to ensure UTC parsing
+                          return `Timestamp: ${utcDate.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}, ${utcDate.toLocaleDateString()}`;
+                        })()
                       : "Timestamp: Just now"}
                   </Text>
 
