@@ -1,29 +1,31 @@
 // PatientLocationScreen.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
-import * as Location from 'expo-location';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Alert,
+    Dimensions,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
+import * as CaregiverService from '../services/CaregiverService';
 
 import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientLocation'>;
@@ -51,7 +53,11 @@ const C = {
   btnTo: '#6366f1',
 };
 
-export default function PatientLocationScreen({ navigation }: Props) {
+export default function PatientLocationScreen({ navigation, route }: Props) {
+  const { colors, isDark } = useTheme();
+  const [patientName, setPatientName] = useState<string>('Loading...');
+  const [lastLocationUpdate, setLastLocationUpdate] = useState<Date>(new Date());
+  
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -60,8 +66,8 @@ export default function PatientLocationScreen({ navigation }: Props) {
   });
 
   const [patientInfo, setPatientInfo] = useState<PatientInfo>({
-    name: 'John Doe',
-    lastUpdated: 'updating...',
+    name: 'Loading...',
+    lastUpdated: 'just now',
     address: 'Loading address...',
     coordinates: { latitude: 0, longitude: 0 },
   });
@@ -71,6 +77,52 @@ export default function PatientLocationScreen({ navigation }: Props) {
 
   const screenH = Dimensions.get('window').height;
   const mapHeight = useMemo(() => Math.max(350, screenH - 380), [screenH]);
+
+  // Helper function to calculate time ago
+  const getTimeAgo = (date: Date): string => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  };
+
+  // Update time ago every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPatientInfo((prev) => ({
+        ...prev,
+        lastUpdated: getTimeAgo(lastLocationUpdate),
+      }));
+    }, 30000); // Update every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [lastLocationUpdate]);
+
+  // Fetch patient name from Supabase on mount
+  useEffect(() => {
+    const fetchPatientName = async () => {
+      try {
+        const id = await CaregiverService.getCurrentCaregiversId();
+        if (id) {
+          const patient = await CaregiverService.getPrimaryPatient(id);
+          if (patient) {
+            setPatientName(patient.full_name || 'Patient');
+            setPatientInfo((prev) => ({
+              ...prev,
+              name: patient.full_name || 'Patient',
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching patient name:', error);
+      }
+    };
+    fetchPatientName();
+  }, []);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
@@ -94,12 +146,14 @@ export default function PatientLocationScreen({ navigation }: Props) {
           ? `${addr.street || 'Near'} ${addr.name || ''}, ${addr.city || ''}, ${addr.region || ''}`.replace(/\s+/g,' ').trim()
           : 'Unknown location';
 
-        setPatientInfo({
-          name: 'John Doe',
+        const now = new Date();
+        setLastLocationUpdate(now);
+        setPatientInfo((prev) => ({
+          ...prev,
           lastUpdated: 'just now',
           address: formattedAddress,
           coordinates: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-        });
+        }));
 
         const region = {
           latitude: loc.coords.latitude,
@@ -117,9 +171,11 @@ export default function PatientLocationScreen({ navigation }: Props) {
       sub = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
         (loc) => {
+          const now = new Date();
+          setLastLocationUpdate(now);
           setPatientInfo((prev) => ({
             ...prev,
-            lastUpdated: '2 mins ago', // simple label to match mock
+            lastUpdated: 'just now',
             coordinates: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
           }));
         }
@@ -142,16 +198,26 @@ export default function PatientLocationScreen({ navigation }: Props) {
     Linking.openURL(url).catch(() => Alert.alert('Error', 'Failed to open maps.'));
   };
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+
+  const dynamicStyles = {
+    root: { ...styles.root, backgroundColor: colors.background },
+    headerTitle: { ...styles.headerTitle, color: colors.text },
+    card: { ...styles.card, backgroundColor: colors.surface },
+    name: { ...styles.name, color: colors.text },
+    updated: { ...styles.updated, color: colors.textSecondary },
+    label: { ...styles.label, color: colors.textSecondary },
+    value: { ...styles.value, color: colors.text },
+  };
 
   return (
-    <View style={styles.root}>
+    <View style={dynamicStyles.root}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back-ios-new" size={24} color={C.slate600} />
+          <MaterialIcons name="arrow-back-ios-new" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Patient Location</Text>
+        <Text style={dynamicStyles.headerTitle}>Patient Location</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -183,8 +249,15 @@ export default function PatientLocationScreen({ navigation }: Props) {
                     style={styles.pin}
                     >
                     <View style={styles.pinAvatar}>
-                        {/* If you have an avatar URI, drop an <Image> here */}
-                        <Text style={styles.pinInitial}>John</Text>
+                        <Text style={styles.pinInitial}>
+                          {patientInfo.name
+                            .split(' ')
+                            .filter(word => word.length > 0)
+                            .map(word => word[0])
+                            .join('')
+                            .toUpperCase()
+                            .slice(0, 2)}
+                        </Text>
                     </View>
                     </LinearGradient>
                 </View>
@@ -250,14 +323,22 @@ export default function PatientLocationScreen({ navigation }: Props) {
         </View>
 
         {/* Details card */}
-        <View style={styles.card}>
+        <View style={dynamicStyles.card}>
             <View style={styles.cardHeader}>
             <View style={styles.avatarRing}>
-                <Text style={styles.avatarInitial}>John</Text>
+                <Text style={styles.avatarInitial}>
+                  {patientInfo.name
+                    .split(' ')
+                    .filter(word => word.length > 0)
+                    .map(word => word[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </Text>
             </View>
             <View style={{ marginLeft: 14 }}>
-                <Text style={styles.name}>John Doe</Text>
-                <Text style={styles.updated}>Last updated: {patientInfo.lastUpdated}</Text>
+                <Text style={dynamicStyles.name}>{patientInfo.name}</Text>
+                <Text style={dynamicStyles.updated}>Last updated: {patientInfo.lastUpdated}</Text>
             </View>
             </View>
 
@@ -269,18 +350,18 @@ export default function PatientLocationScreen({ navigation }: Props) {
                 <MaterialIcons name="pin-drop" size={20} color={C.indigo500} />
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text style={styles.label}>Address</Text>
-                <Text style={styles.value}>{patientInfo.address}</Text>
+                <Text style={dynamicStyles.label}>Address</Text>
+                <Text style={dynamicStyles.value}>{patientInfo.address}</Text>
                 </View>
             </View>
 
             <View style={styles.row}>
-                <View style={[styles.iconBg, { backgroundColor: '#f3e8ff' /* purple-100 */ }]}>
-                <MaterialIcons name="explore" size={20} color="#8b5cf6" />
+                <View style={[styles.iconBg, { backgroundColor: isDark ? '#2d2d44' : '#f3e8ff' }]}>
+                <MaterialIcons name="explore" size={20} color={colors.primary} />
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text style={styles.label}>Coordinates</Text>
-                <Text style={styles.value}>
+                <Text style={dynamicStyles.label}>Coordinates</Text>
+                <Text style={dynamicStyles.value}>
                     {patientInfo.coordinates.latitude
                     ? `${Math.abs(patientInfo.coordinates.latitude).toFixed(4)}° ${
                         patientInfo.coordinates.latitude >= 0 ? 'N' : 'S'
@@ -395,7 +476,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateY: -16 }],
   },
   pinAvatar: {
     width: 40,

@@ -1,9 +1,9 @@
 // src/screens/SignupScreen.tsx
 import {
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_700Bold,
-  useFonts,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_700Bold,
+    useFonts,
 } from "@expo-google-fonts/space-grotesk";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,13 +11,14 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppLoading from "expo-app-loading";
 import React, { useState } from "react";
 import {
-  Alert,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { RootStackParamList } from "../app/App";
 import { supabase } from "../src/lib/supabase";
@@ -230,6 +231,7 @@ const styles = StyleSheet.create({
   },
   fieldWrap: {
     marginBottom: 16,
+    paddingHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   input: {
     height: 56,
@@ -247,6 +249,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
+    marginHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   primaryBtnText: {
     color: COLORS.bg,

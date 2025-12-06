@@ -1,26 +1,11 @@
 // screens/CaregiverDashboardScreen.tsx - COMPLETE WITH DYNAMIC RECENT ACTIVITY
 
 import {
-  SafeAreaView,
-  ScrollView,
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  Animated,
-  Alert,
-  PanResponder,
-  ActivityIndicator,
-} from "react-native";
-import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from "@expo-google-fonts/poppins";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -29,25 +14,41 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 import Svg, {
-  Circle,
-  Defs,
-  Path,
-  Rect,
-  Stop,
-  LinearGradient as SvgGradient,
-  Line as SvgLine,
-  Text as SvgText,
+    Circle,
+    Defs,
+    Path,
+    Rect,
+    Stop,
+    LinearGradient as SvgGradient,
+    Line as SvgLine,
+    Text as SvgText,
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
-import HealthDataService from "../services/HealthDataService";
-import FallAlertListener from "../services/FallAlertListener";
-import { supabase } from "../src/lib/supabase";
-import ReminderHelperService from "../services/ReminderHelperService";
-import MedicationAdherenceService from "../services/MedicationAdherenceService";
+import { useTheme } from "../contexts/ThemeContext";
 import * as CaregiverService from "../services/CaregiverService";
-import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
 import CognitionLevelService, { CognitionScore } from "../services/CognitionLevelService";
+import FallAlertListener from "../services/FallAlertListener";
+import HealthDataService from "../services/HealthDataService";
+import MedicationAdherenceService from "../services/MedicationAdherenceService";
+import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
+import ReminderHelperService from "../services/ReminderHelperService";
+import { supabase } from "../src/lib/supabase";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -69,6 +70,7 @@ type ReminderData = {
     label?: string;
   };
   prefill?: {
+    id?: string;
     title: string;
     date: Date;
     timeText: string;
@@ -76,6 +78,7 @@ type ReminderData = {
 };
 
 export default function CaregiverDashboardScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -86,6 +89,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>("Loading...");
+  const [caregiverName, setCaregiverName] = useState<string>("Caregiver");
+  const [patientPhone, setPatientPhone] = useState<string | null>(null);
   const [alert, setAlert] = useState<any>(null);
   
   /* -------------------- Modal state -------------------- */
@@ -130,11 +135,34 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
         setCaregiverId(id);
         console.log('✅ Caregiver ID set:', id);
         
+        // Fetch caregiver name
+        const { data: cgData } = await supabase
+          .from('caregivers')
+          .select('full_name')
+          .eq('id', id)
+          .single();
+        
+        if (cgData?.full_name) {
+          setCaregiverName(cgData.full_name.split(' ')[0] || 'Caregiver');
+        }
+        
         const patient = await CaregiverService.getPrimaryPatient(id);
         if (patient) {
           setPatientId(patient.id);
           setPatientName(patient.full_name || 'Patient');
           console.log('✅ Primary patient loaded:', patient.full_name);
+          
+          // Fetch patient phone number
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('phone_number')
+            .eq('id', patient.id)
+            .single();
+          
+          if (patientData?.phone_number) {
+            setPatientPhone(patientData.phone_number);
+            console.log('✅ Patient phone loaded');
+          }
         } else {
           console.log('⚠️ No patient linked to this caregiver');
           setPatientName('No Patient Linked');
@@ -299,6 +327,42 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     }
   };
 
+  const handleCallPatient = async () => {
+    try {
+      if (patientPhone) {
+        // Use cached phone number if available
+        Linking.openURL(`tel:${patientPhone}`);
+      } else if (patientId) {
+        // Fetch phone number if not cached
+        const { data, error } = await supabase
+          .from('patients')
+          .select('phone_number')
+          .eq('id', patientId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching patient phone:', error);
+          Alert.alert('Error', 'Failed to fetch patient phone number.');
+          return;
+        }
+
+        const phoneNumber = data?.phone_number;
+        if (!phoneNumber) {
+          Alert.alert('Missing Info', 'Phone number not available for this patient.');
+          return;
+        }
+
+        setPatientPhone(phoneNumber);
+        Linking.openURL(`tel:${phoneNumber}`);
+      } else {
+        Alert.alert('Error', 'Patient information not available.');
+      }
+    } catch (err) {
+      console.error('Error calling patient:', err);
+      Alert.alert('Error', 'Failed to open dialer.');
+    }
+  };
+
   // ✅ Reload reminders when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -460,9 +524,11 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
   if (!fontsLoaded) return <AppLoading />;
 
+  const gradientColors = isDark ? ['#0f0f23', '#1a1a2e'] : ['#e0e7ff', '#f0f4ff'];
+
   if (!caregiverId) {
     return (
-      <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
+      <LinearGradient colors={gradientColors} style={{ flex: 1 }}>
         <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#6366f1" />
           <Text style={{ marginTop: 16, fontFamily: 'Poppins_500Medium', color: '#475569' }}>
@@ -474,15 +540,15 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   }
 
   return (
-    <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
+    <LinearGradient colors={gradientColors} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
           {/* Header */}
           <View style={{ paddingHorizontal: 24, paddingTop: 35 }}>
             <View style={styles.rowBetween}>
               <View>
-                <Text style={styles.subText}>Hello, Caregiver</Text>
-                <Text style={styles.h1}>Dashboard</Text>
+                <Text style={[styles.subText, { color: isDark ? '#9ca3af' : '#64748b' }]}>Hello, {caregiverName}</Text>
+                <Text style={[styles.h1, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>Dashboard</Text>
               </View>
               <View style={styles.row}>
                 <Image
@@ -491,9 +557,9 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   }}
                   style={styles.avatar}
                 />
-                <TouchableOpacity style={styles.iconBtn}
+                <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}
                 onPress={() => navigation.navigate('Settings')}>
-                  <MaterialIcons name="settings" size={28} color="#475569" />
+                  <MaterialIcons name="settings" size={28} color={isDark ? '#9ca3af' : '#475569'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -502,7 +568,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
           {/* Patient Card */}
           <View style={{ paddingHorizontal: 24, marginTop: 16 }}>
             <LinearGradient
-              colors={["#a5b4fc", "#8893F9"]}
+              colors={isDark ? ["#7c3aed", "#6366f1"] : ["#a5b4fc", "#8893F9"]}
               style={styles.patientCard}
             >
               <View style={styles.rowBetween}>
@@ -522,51 +588,56 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 </View>
               </View>
               <View style={styles.rowBetweenBtns}>
-                <GhostBtn icon="phone" text="   Call Patient" />
+                <GhostBtn icon="phone" text="   Call Patient" onPress={handleCallPatient} />
                 <GhostBtn 
                 icon="pin-drop" 
                 text="  Check Location"
-                onPress={() => navigation.navigate('PatientLocation')}  />  
+                onPress={() => navigation.navigate('PatientLocation', { patientName })}  />  
               </View>
             </LinearGradient>
           </View>
 
           {/* Quick Actions */}
-          <QuickActionTitle title="Quick Actions" />
+          <QuickActionTitle title="Quick Actions" isDark={isDark} />
           <View style={styles.grid}>
             <Card
               label="Add Reminder"
               icon="add-alert"
               onPress={() => navigation.navigate("AddReminder")}
+              isDark={isDark}
             />
             <Card 
               label="Patient Details" 
               icon="badge"
-              onPress={() => navigation.navigate('PatientDetails')} />
+              onPress={() => navigation.navigate('PatientDetails')}
+              isDark={isDark}
+            />
             <Card 
               label="Manage Faces" 
               icon="face" full
-              onPress={() => navigation.navigate('ManageFaces')} />
+              onPress={() => navigation.navigate('ManageFaces')}
+              isDark={isDark}
+            />
           </View>
 
           {/* Health Metrics */}
-          <SectionTitle title="Health Metrics" />
+          <SectionTitle title="Health Metrics" isDark={isDark} />
           <View style={{ paddingHorizontal: 24 }}>
-            <CardBox>
+            <CardBox isDark={isDark}>
               <View style={styles.rowBetween}>
                 <View>
-                  <Text style={styles.cardTitle}>Daily Activity</Text>
-                  <Text style={styles.smallMuted}>Steps & Active Time</Text>
+                  <Text style={[styles.cardTitle, { color: isDark ? '#e5e7eb' : '#334155' }]}>Daily Activity</Text>
+                  <Text style={[styles.smallMuted, { color: isDark ? '#9ca3af' : '#64748b' }]}>Steps & Active Time</Text>
                 </View>
-                <MaterialIcons name="directions-walk" size={30} color="#6366F1" />
+                <MaterialIcons name="directions-walk" size={30} color={isDark ? '#a78bfa' : '#6366F1'} />
               </View>
               <View style={{ flexDirection: "row", marginTop: 8 }}>
-                <Text style={styles.steps}>{steps.toLocaleString()}</Text>
-                <Text style={styles.stepLabel}>steps</Text>
+                <Text style={[styles.steps, { color: isDark ? '#a78bfa' : '#6366F1' }]}>{steps.toLocaleString()}</Text>
+                <Text style={[styles.stepLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>steps</Text>
               </View>
               <View style={{ flexDirection: "row", marginTop: -4 }}>
-                <Text style={styles.minutes}>{activeMinutes}</Text>
-                <Text style={styles.minLabel}>active mins</Text>
+                <Text style={[styles.minutes, { color: isDark ? '#e5e7eb' : '#475569' }]}>{activeMinutes}</Text>
+                <Text style={[styles.minLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>active mins</Text>
               </View>
             </CardBox>
 
@@ -575,16 +646,17 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
               values={medicationAdherence}
               loading={loadingAdherence}
               onRefresh={loadMedicationAdherence}
+              isDark={isDark}
             />
 
-            <CardBox>
+            <CardBox isDark={isDark}>
               <View style={styles.rowBetween}>
                 <TouchableOpacity 
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
                   onPress={() => setShowDisclaimerModal(true)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cardTitle}>Cognition Level</Text>
+                  <Text style={[styles.cardTitle, { color: isDark ? '#e5e7eb' : '#334155' }]}>Cognition Level</Text>
                   <MaterialIcons 
                     name="info-outline" 
                     size={18} 
@@ -634,73 +706,73 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   </View>
                   
                   {/* Additional Info */}
-                  <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
-                    <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 13, color: '#64748b', lineHeight: 20 }}>
+                  <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: isDark ? '#2d2d44' : '#e2e8f0' }}>
+                    <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 13, color: isDark ? '#9ca3af' : '#64748b', lineHeight: 20 }}>
                       {CognitionLevelService.getCognitionDescription(cognitionScore.level)}
                     </Text>
                     
                     <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                      <View style={styles.statPill}>
-                        <Text style={styles.statPillLabel}>Medication</Text>
-                        <Text style={styles.statPillValue}>{cognitionScore.factors.medicationAdherence}%</Text>
+                      <View style={[styles.statPill, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]}>
+                        <Text style={[styles.statPillLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Medication</Text>
+                        <Text style={[styles.statPillValue, { color: isDark ? '#e5e7eb' : '#334155' }]}>{cognitionScore.factors.medicationAdherence}%</Text>
                       </View>
-                      <View style={styles.statPill}>
-                        <Text style={styles.statPillLabel}>Falls</Text>
-                        <Text style={styles.statPillValue}>{cognitionScore.details.fallCount}</Text>
+                      <View style={[styles.statPill, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]}>
+                        <Text style={[styles.statPillLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Falls</Text>
+                        <Text style={[styles.statPillValue, { color: isDark ? '#e5e7eb' : '#334155' }]}>{cognitionScore.details.fallCount}</Text>
                       </View>
-                      <View style={styles.statPill}>
-                        <Text style={styles.statPillLabel}>Score</Text>
-                        <Text style={styles.statPillValue}>{cognitionScore.score}</Text>
+                      <View style={[styles.statPill, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]}>
+                        <Text style={[styles.statPillLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Score</Text>
+                        <Text style={[styles.statPillValue, { color: isDark ? '#e5e7eb' : '#334155' }]}>{cognitionScore.score}</Text>
                       </View>
                     </View>
                   </View>
                 </>
               ) : (
-                <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 14, color: '#94a3b8', marginTop: 12 }}>
+                <Text style={{ fontFamily: 'Poppins_400Regular', fontSize: 14, color: isDark ? '#6b7280' : '#94a3b8', marginTop: 12 }}>
                   No cognition data available
                 </Text>
               )}
             </CardBox>
 
-            <CardBox>
+            <CardBox isDark={isDark}>
               <View style={styles.rowBetween}>
-                <Text style={[styles.cardTitle, { textAlign: "center", flex: 1 }]}>
+                <Text style={[styles.cardTitle, { textAlign: "center", flex: 1, color: isDark ? '#e5e7eb' : '#334155' }]}>
                   Weekly Adherence
                 </Text>
                 <TouchableOpacity onPress={loadWeeklyAdherence} disabled={loadingWeeklyAdherence}>
                   <MaterialIcons 
                     name={loadingWeeklyAdherence ? "hourglass-empty" : "refresh"} 
                     size={20} 
-                    color="#6366f1" 
+                    color={isDark ? '#a78bfa' : '#6366f1'} 
                     style={{ marginTop: -6 }}
                   />
                 </TouchableOpacity>
               </View>
               {loadingWeeklyAdherence ? (
                 <View style={{ height: 200, justifyContent: 'center', alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color="#6366f1" />
+                  <ActivityIndicator size="small" color={isDark ? '#a78bfa' : '#6366f1'} />
                 </View>
               ) : (
-                <Ring percent={weeklyAdherence} />
+                <Ring percent={weeklyAdherence} isDark={isDark} />
               )}
             </CardBox>
           </View>
 
           {/* Upcoming Reminders Section */}
           <View style={{ flexDirection: 'row', marginBottom: 2 }}>
-            <Text style={styles.sectionTitle}>Upcoming Reminders (24h)</Text>
+            <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : '#374151' }]}>Upcoming Reminders (24h)</Text>
             <TouchableOpacity 
               onPress={loadUpcomingReminders}
               style={{ paddingRight: 20, paddingTop: 17 , marginLeft: -4 }}
             >
-              <MaterialIcons name="refresh" size={24} color="#6366f1" />
+              <MaterialIcons name="refresh" size={24} color={isDark ? '#a78bfa' : '#6366f1'} />
             </TouchableOpacity>
           </View>
           <View style={{ paddingHorizontal: 24 }}>
             {loadingReminders ? (
-              <View style={styles.emptyStateCard}>
-                <ActivityIndicator size="large" color="#6366f1" />
-                <Text style={styles.emptyStateTitle}>Loading reminders...</Text>
+              <View style={[styles.emptyStateCard, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>
+                <ActivityIndicator size="large" color={isDark ? '#a78bfa' : '#6366f1'} />
+                <Text style={[styles.emptyStateTitle, { color: isDark ? '#e5e7eb' : '#475569' }]}>Loading reminders...</Text>
               </View>
             ) : upcomingReminders.length > 0 ? (
               upcomingReminders.map((reminder, index) => (
@@ -712,13 +784,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   color={reminder.chipColor}
                   bg={reminder.chipBg}
                   onPress={() => openReminder(reminder)}
+                  isDark={isDark}
                 />
               ))
             ) : (
-              <View style={styles.emptyStateCard}>
-                <MaterialIcons name="event-available" size={48} color="#94a3b8" />
-                <Text style={styles.emptyStateTitle}>No Upcoming Reminders</Text>
-                <Text style={styles.emptyStateSubtitle}>
+              <View style={[styles.emptyStateCard, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>
+                <MaterialIcons name="event-available" size={48} color={isDark ? '#6b7280' : '#94a3b8'} />
+                <Text style={[styles.emptyStateTitle, { color: isDark ? '#e5e7eb' : '#475569' }]}>No Upcoming Reminders</Text>
+                <Text style={[styles.emptyStateSubtitle, { color: isDark ? '#9ca3af' : '#94a3b8' }]}>
                   All clear for the next 24 hours!
                 </Text>
               </View>
@@ -727,7 +800,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
           {/* ✅ Recent Activity - NOW WITH DYNAMIC DATA */}
           <View style={{ flexDirection: 'row', marginBottom: 2, alignItems: 'center' }}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : '#374151' }]}>Recent Activity</Text>
             <TouchableOpacity 
               onPress={loadRecentActivities}
               style={{ paddingRight: 20, paddingTop: 6, marginLeft: 114 }}
@@ -736,15 +809,15 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
               <MaterialIcons 
                 name={loadingActivities ? "hourglass-empty" : "refresh"} 
                 size={24} 
-                color="#6366f1" 
+                color={isDark ? '#a78bfa' : '#6366f1'} 
               />
             </TouchableOpacity>
           </View>
           <View style={{ paddingHorizontal: 24 }}>
             {loadingActivities ? (
-              <View style={styles.emptyStateCard}>
-                <ActivityIndicator size="large" color="#6366f1" />
-                <Text style={styles.emptyStateTitle}>Loading activities...</Text>
+              <View style={[styles.emptyStateCard, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>
+                <ActivityIndicator size="large" color={isDark ? '#a78bfa' : '#6366f1'} />
+                <Text style={[styles.emptyStateTitle, { color: isDark ? '#e5e7eb' : '#475569' }]}>Loading activities...</Text>
               </View>
             ) : recentActivities.length > 0 ? (
               recentActivities.map((activity) => (
@@ -755,13 +828,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   icon={activity.icon}
                   color={activity.iconColor}
                   bg={activity.iconBg}
+                  isDark={isDark}
                 />
               ))
             ) : (
-              <View style={styles.emptyStateCard}>
-                <MaterialIcons name="history" size={48} color="#94a3b8" />
-                <Text style={styles.emptyStateTitle}>No Recent Activity</Text>
-                <Text style={styles.emptyStateSubtitle}>
+              <View style={[styles.emptyStateCard, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>
+                <MaterialIcons name="history" size={48} color={isDark ? '#6b7280' : '#94a3b8'} />
+                <Text style={[styles.emptyStateTitle, { color: isDark ? '#e5e7eb' : '#475569' }]}>No Recent Activity</Text>
+                <Text style={[styles.emptyStateSubtitle, { color: isDark ? '#9ca3af' : '#94a3b8' }]}>
                   Patient activities will appear here
                 </Text>
               </View>
@@ -794,10 +868,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   </Text> 
                   <Text style={styles.putimestamp}>
                     {alert?.created_at
-                      ? `Timestamp: ${new Date(alert.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}, ${new Date(alert.created_at).toLocaleDateString()}`
+                      ? (() => {
+                          // Convert UTC timestamp to local time
+                          const utcDate = new Date(alert.created_at + 'Z'); // Add 'Z' to ensure UTC parsing
+                          return `Timestamp: ${utcDate.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}, ${utcDate.toLocaleDateString()}`;
+                        })()
                       : "Timestamp: Just now"}
                   </Text>
 
@@ -806,7 +884,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                       style={styles.puprimaryButton}
                       onPress={() => {
                         setAlert(null);
-                        navigation.navigate("PatientLocation");
+                        navigation.navigate("PatientLocation", { patientName });
                       }}
                     >
                       <MaterialIcons name="location-on" size={22} color="#e11d48" />
@@ -1088,12 +1166,12 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
 /* --- Components --- */
 
-function SectionTitle({ title }: { title: string }) {
-  return <Text style={styles.sectionTitle}>{title}</Text>;
+function SectionTitle({ title, isDark }: { title: string; isDark?: boolean }) {
+  return <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : '#374151' }]}>{title}</Text>;
 }
 
-function QuickActionTitle({ title }: { title: string }) {
-  return <Text style={styles.quickactionTitle}>{title}</Text>;
+function QuickActionTitle({ title, isDark }: { title: string; isDark?: boolean }) {
+  return <Text style={[styles.quickactionTitle, { color: isDark ? '#e5e7eb' : '#374151' }]}>{title}</Text>;
 }
 
 type GhostBtnProps = {
@@ -1116,27 +1194,29 @@ function Card({
   icon,
   full,
   onPress,
+  isDark,
 }: {
   label: string;
   icon: string;
   full?: boolean;
   onPress?: () => void;
+  isDark?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.card, full && { flexBasis: "100%" }]}
+      style={[styles.card, full && { flexBasis: "100%" }, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}
       onPress={onPress}
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
-      <MaterialIcons name={icon as any} size={32} color="#6366f1" />
-      <Text style={styles.cardLabel}>{label}</Text>
+      <MaterialIcons name={icon as any} size={32} color={isDark ? '#a78bfa' : '#6366f1'} />
+      <Text style={[styles.cardLabel, { color: isDark ? '#e5e7eb' : '#475569' }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-function CardBox({ children }: { children: React.ReactNode }) {
-  return <View style={styles.cardBox}>{children}</View>;
+function CardBox({ children, isDark }: { children: React.ReactNode; isDark?: boolean }) {
+  return <View style={[styles.cardBox, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>{children}</View>;
 }
 
 function ListItem({
@@ -1147,6 +1227,7 @@ function ListItem({
   bg,
   extra,
   onPress,
+  isDark,
 }: {
   title: string;
   subtitle: string;
@@ -1155,15 +1236,16 @@ function ListItem({
   bg: string;
   extra?: string;
   onPress?: () => void;
+  isDark?: boolean;
 }) {
   return (
-    <TouchableOpacity style={styles.listCard} activeOpacity={0.75} onPress={onPress}>
+    <TouchableOpacity style={[styles.listCard, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]} activeOpacity={0.75} onPress={onPress}>
       <View style={[styles.iconBg, { backgroundColor: bg }]}>
         <MaterialIcons name={icon as any} size={22} color={color} />
       </View>
       <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text style={styles.listTitle}>{title}</Text>
-        <Text style={styles.smallMuted}>{subtitle}</Text>
+        <Text style={[styles.listTitle, { color: isDark ? '#e5e7eb' : '#334155' }]}>{title}</Text>
+        <Text style={[styles.smallMuted, { color: isDark ? '#9ca3af' : '#64748b' }]}>{subtitle}</Text>
       </View>
       {extra ? (
         <Text style={{ fontFamily: "Poppins_600SemiBold", color: "#22c55e" }}>
@@ -1178,11 +1260,13 @@ function ListItem({
 function MedicationAdherenceCard({ 
   values, 
   loading,
-  onRefresh 
+  onRefresh,
+  isDark
 }: { 
   values: number[];
   loading: boolean;
   onRefresh: () => void;
+  isDark?: boolean;
 }) {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -1226,24 +1310,24 @@ function MedicationAdherenceCard({
   };
 
   return (
-    <View style={styles.cardBox}>
+    <View style={[styles.cardBox, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}>
       <View style={styles.rowBetween}>
         <View>
-          <Text style={med.title}>Medication Adherence</Text>
-          <Text style={med.subtitle}>Last 7 days</Text>
+          <Text style={[med.title, { color: isDark ? '#e5e7eb' : '#334155' }]}>Medication Adherence</Text>
+          <Text style={[med.subtitle, { color: isDark ? '#9ca3af' : '#94a3b8' }]}>Last 7 days</Text>
         </View>
         <TouchableOpacity onPress={onRefresh} disabled={loading}>
           <MaterialIcons 
             name={loading ? "hourglass-empty" : "medication"} 
             size={24} 
-            color="#6366f1" 
+            color={isDark ? '#a78bfa' : '#6366f1'} 
           />
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={{ height: SVG_H, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="small" color="#6366f1" />
+          <ActivityIndicator size="small" color={isDark ? '#a78bfa' : '#6366f1'} />
         </View>
       ) : (
         <Svg width={SVG_W} height={SVG_H} style={{ marginTop: 6 }}>
@@ -1326,7 +1410,7 @@ function MedicationAdherenceCard({
   );
 }
 
-function Ring({ percent }: { percent: number }) {
+function Ring({ percent, isDark }: { percent: number; isDark?: boolean }) {
   const size = 200;
   const stroke = 16;
   const r = (size - stroke) / 2;
@@ -1343,7 +1427,7 @@ function Ring({ percent }: { percent: number }) {
             <Stop offset="100%" stopColor="#c084fc" />
           </SvgGradient>
         </Defs>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="#EEF2FF" strokeWidth={stroke} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={isDark ? "#2d2d44" : "#EEF2FF"} strokeWidth={stroke} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -1357,8 +1441,8 @@ function Ring({ percent }: { percent: number }) {
         />
       </Svg>
       <View style={[styles.ringCenter, { top: "36%" }]}>
-        <Text style={[styles.ringPercent, { fontSize: 32 }]}>{clamped}%</Text>
-        <Text style={[styles.smallMuted, { marginTop: -15 }]}>Adherence</Text>
+        <Text style={[styles.ringPercent, { fontSize: 32, color: isDark ? '#e5e7eb' : '#1e293b' }]}>{clamped}%</Text>
+        <Text style={[styles.smallMuted, { marginTop: 2, color: isDark ? '#9ca3af' : '#64748b' }]}>Adherence</Text>
       </View>
     </View>
   );
