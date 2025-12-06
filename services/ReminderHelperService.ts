@@ -37,6 +37,10 @@ export type ReminderData = {
     title: string;
     date: Date;
     timeText: string;
+    type?: string;
+    medication?: string;
+    instructions?: string;
+    caregiver_note?: string;
   };
 };
 
@@ -179,6 +183,10 @@ class ReminderHelperService {
         title: r.title,
         date: reminderDate,
         timeText: r.time,
+        type: r.type,
+        medication: r.medication || undefined,
+        instructions: r.instructions || undefined,
+        caregiver_note: r.caregiver_note || undefined,
       },
     };
   }

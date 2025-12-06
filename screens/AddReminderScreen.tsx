@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import ReminderService from '../services/ReminderService';
+import { useTheme } from '../contexts/ThemeContext';
 
 const INDIGO = '#6366f1';
 const SLATE_800 = '#1e293b';
@@ -73,6 +74,7 @@ Notifications.setNotificationHandler({
 type Props = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
 
 const AddReminderScreen = ({ navigation, route }: Props) => {
+  const { colors, isDark } = useTheme();
   const prefill = route.params?.prefill;
   const isEditing = !!prefill?.id; // Check if we're editing an existing reminder
   const reminderId = prefill?.id;
@@ -145,6 +147,22 @@ const AddReminderScreen = ({ navigation, route }: Props) => {
       
       if (prefill.title) {
         setReminderTitle(prefill.title);
+      }
+      
+      if (prefill.type) {
+        setReminderType(prefill.type);
+      }
+      
+      if (prefill.medication) {
+        setMedication(prefill.medication);
+      }
+      
+      if (prefill.instructions) {
+        setInstructions(prefill.instructions);
+      }
+      
+      if (prefill.caregiver_note) {
+        setCaregiverNote(prefill.caregiver_note);
       }
       
       if (prefill.date) {
@@ -338,108 +356,122 @@ const AddReminderScreen = ({ navigation, route }: Props) => {
 
   const days = generateCalendarDays();
 
+  const dynamicStyles = {
+    container: { ...styles.container, backgroundColor: isDark ? '#0f0f23' : '#e8e9f3' },
+    header: { ...styles.header, backgroundColor: isDark ? '#0f0f23' : '#e8e9f3' },
+    card: { ...styles.card, backgroundColor: isDark ? '#1a1a2e' : BG_CARD },
+    text: { color: isDark ? '#e5e7eb' : SLATE_800 },
+    textSecondary: { color: isDark ? '#9ca3af' : SLATE_600 },
+    input: { ...styles.input, color: isDark ? '#e5e7eb' : SLATE_800 },
+    inputContainer: {
+      ...styles.inputContainer,
+      backgroundColor: isDark ? '#2d2d44' : BG_INPUT,
+      borderColor: isDark ? '#374151' : SLATE_200,
+    },
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {/* HEADER */}
-      <View style={styles.header}>
+      <View style={dynamicStyles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color={SLATE_800} />
-          <Text style={styles.backText}>Back</Text>
+          <Ionicons name="chevron-back" size={24} color={isDark ? '#9ca3af' : SLATE_800} />
+          <Text style={[styles.backText, dynamicStyles.text]}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isEditing ? 'Edit Reminder' : 'Add Reminder'}</Text>
+        <Text style={[styles.headerTitle, dynamicStyles.text]}>{isEditing ? 'Edit Reminder' : 'Add Reminder'}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* MAIN CARD */}
-        <View style={styles.card}>
+        <View style={dynamicStyles.card}>
           {/* TITLE */}
-          <Text style={styles.label}>Reminder Title</Text>
-          <View style={styles.inputContainer}>
-            <MaterialCommunityIcons name="text" size={20} color={SLATE_500} style={styles.inputIcon} />
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Reminder Title</Text>
+          <View style={dynamicStyles.inputContainer}>
+            <MaterialCommunityIcons name="text" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
+              style={dynamicStyles.input}
               placeholder="Take medication"
-              placeholderTextColor={SLATE_400}
+              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
               value={reminderTitle}
               onChangeText={setReminderTitle}
             />
           </View>
 
           {/* TYPE */}
-          <Text style={styles.label}>Type</Text>
-          <View style={styles.inputContainer}>
-            <MaterialCommunityIcons name="bottle-tonic-plus" size={20} color={SLATE_500} style={styles.inputIcon} />
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Type</Text>
+          <View style={dynamicStyles.inputContainer}>
+            <MaterialCommunityIcons name="bottle-tonic-plus" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
+              style={dynamicStyles.input}
               placeholder="Medication"
-              placeholderTextColor={SLATE_400}
+              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
               value={reminderType}
               onChangeText={setReminderType}
             />
           </View>
 
           {/* MEDICATION */}
-          <Text style={styles.label}>Medication</Text>
-          <View style={styles.inputContainer}>
-            <MaterialCommunityIcons name="pill" size={20} color={SLATE_500} style={styles.inputIcon} />
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Medication</Text>
+          <View style={dynamicStyles.inputContainer}>
+            <MaterialCommunityIcons name="pill" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
+              style={dynamicStyles.input}
               placeholder="Donepezil"
-              placeholderTextColor={SLATE_400}
+              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
               value={medication}
               onChangeText={setMedication}
             />
           </View>
 
           {/* INSTRUCTIONS */}
-          <Text style={styles.label}>Instructions</Text>
-          <View style={styles.inputContainer}>
-            <MaterialCommunityIcons name="text-box-outline" size={20} color={SLATE_500} style={styles.inputIconTop} />
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Instructions</Text>
+          <View style={dynamicStyles.inputContainer}>
+            <MaterialCommunityIcons name="text-box-outline" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIconTop} />
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[dynamicStyles.input, styles.textArea]}
               multiline
               placeholder="Take one tablet with a glass of water after breakfast."
-              placeholderTextColor={SLATE_400}
+              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
               value={instructions}
               onChangeText={setInstructions}
             />
           </View>
 
           {/* CAREGIVER NOTE */}
-          <Text style={styles.label}>Caregiver Note (optional)</Text>
-          <View style={styles.inputContainer}>
-            <MaterialCommunityIcons name="account-edit" size={20} color={SLATE_500} style={styles.inputIconTop} />
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Caregiver Note (optional)</Text>
+          <View style={dynamicStyles.inputContainer}>
+            <MaterialCommunityIcons name="account-edit" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIconTop} />
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[dynamicStyles.input, styles.textArea]}
               multiline
               placeholder="Check if mom takes it. She sometimes forgets."
-              placeholderTextColor={SLATE_400}
+              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
               value={caregiverNote}
               onChangeText={setCaregiverNote}
             />
           </View>
 
           {/* TIME */}
-          <Text style={styles.label}>Time</Text>
-          <TouchableOpacity style={styles.inputContainer} onPress={openTimePicker}>
-            <Ionicons name="time-outline" size={20} color={SLATE_500} style={styles.inputIcon} />
-            <Text style={styles.inputText}>{selectedTime}</Text>
+          <Text style={[styles.label, dynamicStyles.textSecondary]}>Time</Text>
+          <TouchableOpacity style={dynamicStyles.inputContainer} onPress={openTimePicker}>
+            <Ionicons name="time-outline" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIcon} />
+            <Text style={[styles.inputText, dynamicStyles.text]}>{selectedTime}</Text>
           </TouchableOpacity>
         </View>
 
         {/* DATE PICKER CARD */}
-        <View style={styles.dateCard}>
-          <Text style={styles.dateTitle}>Set Date</Text>
+        <View style={[styles.dateCard, dynamicStyles.card]}>
+          <Text style={[styles.dateTitle, dynamicStyles.text]}>Set Date</Text>
           
           <View style={styles.calendarHeader}>
             <TouchableOpacity onPress={handlePrevMonth}>
-              <Ionicons name="chevron-back" size={24} color={SLATE_700} />
+              <Ionicons name="chevron-back" size={24} color={isDark ? '#9ca3af' : SLATE_700} />
             </TouchableOpacity>
-            <Text style={styles.calendarHeaderText}>
+            <Text style={[styles.calendarHeaderText, dynamicStyles.text]}>
               {months[currentMonth]} {currentYear}
             </Text>
             <TouchableOpacity onPress={handleNextMonth}>
-              <Ionicons name="chevron-forward" size={24} color={SLATE_700} />
+              <Ionicons name="chevron-forward" size={24} color={isDark ? '#9ca3af' : SLATE_700} />
             </TouchableOpacity>
           </View>
 

@@ -48,6 +48,7 @@ import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
 import ReminderHelperService from "../services/ReminderHelperService";
 import { supabase } from "../src/lib/supabase";
+import { useTheme } from "../contexts/ThemeContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
@@ -77,6 +78,7 @@ type ReminderData = {
 };
 
 export default function CaregiverDashboardScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -461,9 +463,11 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
   if (!fontsLoaded) return <AppLoading />;
 
+  const gradientColors = isDark ? ['#0f0f23', '#1a1a2e'] : ['#e0e7ff', '#f0f4ff'];
+
   if (!caregiverId) {
     return (
-      <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
+      <LinearGradient colors={gradientColors} style={{ flex: 1 }}>
         <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#6366f1" />
           <Text style={{ marginTop: 16, fontFamily: 'Poppins_500Medium', color: '#475569' }}>
@@ -475,15 +479,15 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   }
 
   return (
-    <LinearGradient colors={["#e0e7ff", "#f0f4ff"]} style={{ flex: 1 }}>
+    <LinearGradient colors={gradientColors} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
           {/* Header */}
           <View style={{ paddingHorizontal: 24, paddingTop: 35 }}>
             <View style={styles.rowBetween}>
               <View>
-                <Text style={styles.subText}>Hello, Caregiver</Text>
-                <Text style={styles.h1}>Dashboard</Text>
+                <Text style={[styles.subText, { color: isDark ? '#9ca3af' : '#64748b' }]}>Hello, Caregiver</Text>
+                <Text style={[styles.h1, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>Dashboard</Text>
               </View>
               <View style={styles.row}>
                 <Image

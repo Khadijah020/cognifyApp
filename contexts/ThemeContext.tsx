@@ -36,14 +36,14 @@ const LIGHT: ThemeColors = {
 };
 
 const DARK: ThemeColors = {
-  background: '#0b1220',
-  surface: '#111827',
-  text: '#f3f4f6',
-  textSecondary: '#cbd5e1',
-  placeholder: '#94a3b8',
-  primary: '#818cf8',
-  primaryLight: '#1f2937',
-  border: '#1f2937',
+  background: '#0f0f23',
+  surface: '#1a1a2e',
+  text: '#e5e7eb',
+  textSecondary: '#9ca3af',
+  placeholder: '#6b7280',
+  primary: '#9333ea',
+  primaryLight: '#2d2d44',
+  border: '#374151',
   success: '#22c55e',
   shadow: 'rgba(0,0,0,0.5)',
 };
