@@ -1,4 +1,4 @@
-// PatientDashboardScreen.tsx
+// PatientDashboardScreen.tsx - COMPLETE WITH DYNAMIC RECENT ACTIVITY
 
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -32,8 +32,8 @@ import HealthDataService from '../services/HealthDataService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
 import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
+import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
 
-import FaceRecognitionService from '@/services/FaceRecognitionService';
 import {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -63,6 +63,22 @@ type ReminderData = {
   };
 };
 
+// ✅ Face recognition data type
+type RecognizedFace = {
+  id: string;
+  name: string;
+  relationship: string;
+  imageUri: string;
+  dateAdded: string;
+};
+
+type FaceRecognitionData = {
+  name: string;
+  relationship: string;
+  confidence: number;
+  timestamp: string;
+};
+
 const C = {
   bgFrom: '#e0e7ff',
   bgTo: '#f0f4ff',
@@ -85,10 +101,15 @@ const C = {
   blue50: '#eff6ff',
   blue300: '#93c5fd',
   shadow: 'rgba(0,0,0,0.06)',
+  emerald400: '#34d399',
+  emerald500: '#10b981',
 };
 
 const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
+
+const STORAGE_KEY = 'cognify_recognized_faces';
+const BACKEND_URL = 'https://1bf760273912.ngrok-free.app'; // ⚠️ Update this to match your backend
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -101,7 +122,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [steps, setSteps] = useState(0);
   const [activeMinutes, setActiveMinutes] = useState(0);
   
-  // ✅ Patient ID and reminders state
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>('Patient');
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
@@ -109,7 +129,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [loadingReminders, setLoadingReminders] = useState(true);
   const [loading, setLoading] = useState(true);
   
-  // ✅ Real-time SIMPLE reminder notification state (NOT contextual)
   const [currentReminder, setCurrentReminder] = useState<ReminderData | null>(null);
   const [showReminderNotification, setShowReminderNotification] = useState(false);
 
@@ -117,10 +136,23 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [showReminder, setShowReminder] = useState(false);
   const [activeReminder, setActiveReminder] = useState<ReminderData | null>(null);
 
+  // ✅ Face recognition popup state
+  const [recognizedFace, setRecognizedFace] = useState<(RecognizedFace & { confidence?: number }) | null>(null);
+  const [showFacePopup, setShowFacePopup] = useState(false);
+  const [localFaces, setLocalFaces] = useState<RecognizedFace[]>([]);
+
+  // ✅ NEW: Recent activities state
+  const [recentActivities, setRecentActivities] = useState<PatientActivity[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(true);
+
   // Modal animation
   const translateY = useRef(new Animated.Value(0)).current;
   const sheetHeight = useRef(0);
   const DRAG_CLOSE_THRESHOLD = 120;
+
+  // ✅ Face popup animation
+  const facePopupScale = useRef(new Animated.Value(0)).current;
+  const facePopupOpacity = useRef(new Animated.Value(0)).current;
 
   const animateTo = (to: number, cb?: () => void) => {
     Animated.spring(translateY, {
@@ -144,7 +176,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     });
   };
   
-  // ✅ CONTEXTUAL REMINDERS - Separate state (DO NOT TOUCH)
   const [contextualRemindersEnabled, setContextualRemindersEnabled] = useState(true);
   const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
   const [currentContextualReminder, setCurrentContextualReminder] = useState<string | undefined>(undefined);
@@ -168,7 +199,65 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     })
   ).current;
 
-  // ✅ Load patient data on mount
+  // ✅ Load local faces from storage
+  useEffect(() => {
+    loadLocalFaces();
+  }, []);
+
+  const loadLocalFaces = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        setLocalFaces(JSON.parse(stored));
+        console.log('✅ Loaded local faces:', JSON.parse(stored).length);
+      }
+    } catch (error) {
+      console.error('❌ Error loading local faces:', error);
+    }
+  };
+
+  // ✅ Animate face popup in
+  const showFaceRecognitionPopup = (face: RecognizedFace & { confidence?: number }) => {
+    setRecognizedFace(face);
+    setShowFacePopup(true);
+    
+    facePopupScale.setValue(0.8);
+    facePopupOpacity.setValue(0);
+    
+    Animated.parallel([
+      Animated.spring(facePopupScale, {
+        toValue: 1,
+        tension: 100,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.timing(facePopupOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // ✅ Animate face popup out
+  const hideFaceRecognitionPopup = () => {
+    Animated.parallel([
+      Animated.timing(facePopupScale, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(facePopupOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowFacePopup(false);
+      setRecognizedFace(null);
+    });
+  };
+
   useEffect(() => {
     loadUserData();
   }, []);
@@ -216,14 +305,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  // ✅ Load reminders when patient ID is available
   useEffect(() => {
     if (!patientId) return;
 
     loadUpcomingReminders();
     const interval = setInterval(loadUpcomingReminders, 5 * 60 * 1000);
 
-    // Real-time subscription
     const subscription = supabase
       .channel('patient-reminders')
       .on(
@@ -237,6 +324,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         () => {
           console.log('📡 Reminder changed - reloading list');
           loadUpcomingReminders();
+          loadRecentActivities(); // ✅ Refresh activities when reminders change
         }
       )
       .subscribe();
@@ -248,7 +336,37 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     };
   }, [patientId]);
 
-  // ✅ Check for SIMPLE reminders that should trigger NOW
+  // ✅ NEW: Load recent activities when patient ID is available
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadRecentActivities();
+    
+    // Refresh activities every 2 minutes
+    const interval = setInterval(loadRecentActivities, 2 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  // ✅ NEW: Load recent activities function
+  const loadRecentActivities = async () => {
+    if (!patientId) return;
+
+    try {
+      setLoadingActivities(true);
+      console.log('📋 Loading recent activities for patient:', patientId);
+      
+      const activities = await PatientActivityService.getRecentActivities(patientId, 10);
+      
+      setRecentActivities(activities);
+      console.log('✅ Loaded', activities.length, 'recent activities');
+    } catch (error) {
+      console.error('❌ Error loading recent activities:', error);
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
+
   useEffect(() => {
     if (!patientId) return;
 
@@ -264,7 +382,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
         const now = new Date();
         
-        // Find reminders that are due right now
         const dueReminders = allReminders.filter(r => {
           const reminderTime = ReminderHelperService.parseReminderDateTime(r.date, r.time);
           const timeDiff = reminderTime.getTime() - now.getTime();
@@ -343,7 +460,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  /* ---------------- Load user settings for CONTEXTUAL reminders (DO NOT TOUCH) ---------------- */
   useEffect(() => {
     (async () => {
       const remindersPref = await AsyncStorage.getItem('contextualReminders');
@@ -353,7 +469,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     })();
   }, []);
 
-  /* ---------------- Load health data ---------------- */
   useEffect(() => {
     loadHealthData();
     const interval = setInterval(loadHealthData, 30000);
@@ -371,7 +486,6 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
-  /* ---------------- Poll for CONTEXTUAL reminders (DO NOT TOUCH) ---------------- */
   useEffect(() => {
     if (!contextualRemindersEnabled) return;
 
@@ -398,48 +512,83 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     return () => clearInterval(interval);
   }, [contextualRemindersEnabled, voiceAlertsEnabled]);
 
-/* ---------------- Start Face Recognition Service ---------------- */
-useEffect(() => {
-  // Start face recognition service
-  FaceRecognitionService.start(voiceAlertsEnabled);
-
-  return () => FaceRecognitionService.stop();
-}, [voiceAlertsEnabled]);
-
-
-
-
-/* ---------------- Poll for face recognitions ---------------- */
-useEffect(() => {
+  // ✅ Poll for face recognitions with local face matching
+  useEffect(() => {
   const interval = setInterval(async () => {
     try {
       const res = await axios.get('https://3be3dc176e4c.ngrok-free.app/get_face_recognitions');
       const faces = res.data.faces || [];
 
       if (faces.length > 0) {
-        for (const face of faces) {
-          const message = `Hello! ${face.name}, your ${face.relationship}, is here.`;
+        for (const faceData of faces) {
+          // ✅ Check cooldown - don't show popup if shown within last hour
+          const cooldownKey = `face_shown_${faceData.name.toLowerCase().trim()}`;
+          const lastShownTime = await AsyncStorage.getItem(cooldownKey);
           
-          // Speak it out loud
-          if (voiceAlertsEnabled) {
-            Speech.speak(message, {
-              language: 'en-US',
-              pitch: 1.0,
-              rate: 0.9,
-            });
+          if (lastShownTime) {
+            const timeSinceShown = Date.now() - parseInt(lastShownTime, 10);
+            const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
+            
+            if (timeSinceShown < oneHourInMs) {
+              console.log(`⏭️ Skipping ${faceData.name} - shown ${Math.round(timeSinceShown / 60000)} minutes ago`);
+              continue; // Skip this person
+            }
           }
-          
-          // Optional: Show in recent activity
-          console.log(`👤 Face recognized: ${face.name}`);
+
+          // Find matching local face
+          const localFace = localFaces.find(
+            f => f.name.toLowerCase().trim() === faceData.name.toLowerCase().trim()
+          );
+
+          // ✅ Set cooldown timestamp BEFORE showing popup
+          await AsyncStorage.setItem(cooldownKey, Date.now().toString());
+
+          // Show popup
+          if (localFace) {
+            showFaceRecognitionPopup({
+              ...localFace,
+              confidence: faceData.confidence,
+            });
+
+            if (voiceAlertsEnabled) {
+              const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
+              Speech.speak(message, {
+                language: 'en-US',
+                pitch: 1.0,
+                rate: 0.9,
+              });
+            }
+          } else {
+            showFaceRecognitionPopup({
+              id: Date.now().toString(),
+              name: faceData.name,
+              relationship: faceData.relationship,
+              imageUri: '',
+              dateAdded: new Date().toISOString(),
+              confidence: faceData.confidence,
+            });
+
+            if (voiceAlertsEnabled) {
+              const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
+              Speech.speak(message, {
+                language: 'en-US',
+                pitch: 1.0,
+                rate: 0.9,
+              });
+            }
+          }
+
+          // ✅ Refresh activities after face recognition
+          loadRecentActivities();
         }
       }
     } catch (err) {
       console.log('Error fetching face recognitions:', err);
     }
-  }, 3000); // Poll every 3 seconds
+  }, 3000);
 
   return () => clearInterval(interval);
-}, [voiceAlertsEnabled]);
+}, [voiceAlertsEnabled, localFaces]);
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
@@ -451,23 +600,19 @@ useEffect(() => {
     else Linking.openURL(url);
   };
 
-  // ✅ SIMPLE MEDICATION REMINDER POPUP (with fixed timer)
   const MedicationReminderPopup: React.FC<{ visible: boolean; reminder: ReminderData | null; onClose: () => void }> = ({ visible, reminder, onClose }) => {
     const [timeRemaining, setTimeRemaining] = React.useState(300);
     const timerStartTimeRef = React.useRef<number | null>(null);
     const timerIntervalRef = React.useRef<number | null>(null);
     const autoCloseTimeoutRef = React.useRef<number | null>(null);
 
-    // ✅ FIX: Start timer only once when popup becomes visible
     React.useEffect(() => {
       if (visible && reminder) {
         console.log('⏱️ Starting 5-minute timer for reminder:', reminder.id);
         
-        // Record start time
         timerStartTimeRef.current = Date.now();
         setTimeRemaining(300);
 
-        // Update countdown every second based on elapsed time
         timerIntervalRef.current = window.setInterval(() => {
           if (timerStartTimeRef.current) {
             const elapsed = Math.floor((Date.now() - timerStartTimeRef.current) / 1000);
@@ -476,7 +621,6 @@ useEffect(() => {
           }
         }, 1000);
 
-        // Auto-close after exactly 5 minutes
         autoCloseTimeoutRef.current = window.setTimeout(() => {
           handleMissed();
         }, 300000);
@@ -526,6 +670,7 @@ useEffect(() => {
         
         await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
         await loadUpcomingReminders();
+        await loadRecentActivities(); // ✅ Refresh activities
       } catch (error) {
         console.error('❌ Error marking reminder as missed:', error);
       }
@@ -554,6 +699,7 @@ useEffect(() => {
         
         await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
         await loadUpcomingReminders();
+        await loadRecentActivities(); // ✅ Refresh activities
       } catch (error) {
         console.error('❌ Error updating reminder:', error);
       }
@@ -632,7 +778,6 @@ useEffect(() => {
             end={{ x: 1, y: 1 }}
             style={styles.reminderCardModern}
           >
-            {/* ✅ FIX: Timer badge positioned ABOVE icon */}
             <View style={styles.timerBadge}>
               <MaterialIcons name="timer" size={14} color="#fff" />
               <Text style={styles.timerText}>Auto-close in {formatTimeRemaining()}</Text>
@@ -685,6 +830,74 @@ useEffect(() => {
           </LinearGradient>
         </View>
       </View>
+    );
+  };
+
+  // ✅ Face Recognition Popup Component
+  const FaceRecognitionPopup: React.FC<{
+    visible: boolean;
+    face: (RecognizedFace & { confidence?: number }) | null;
+    onClose: () => void;
+  }> = ({ visible, face, onClose }) => {
+    if (!visible || !face) return null;
+
+    return (
+      <Modal visible={visible} transparent animationType="none">
+        <View style={faceStyles.overlay}>
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+          
+          <Animated.View
+            style={[
+              faceStyles.popupContainer,
+              {
+                opacity: facePopupOpacity,
+                transform: [{ scale: facePopupScale }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={['#6ee7b7', '#34d399']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={faceStyles.popup}
+            >
+              {/* Face Image */}
+              {face.imageUri ? (
+                <Image 
+                  source={{ uri: face.imageUri }} 
+                  style={faceStyles.faceImage}
+                />
+              ) : (
+                <View style={faceStyles.faceImagePlaceholder}>
+                  <MaterialIcons name="person" size={64} color="#fff" />
+                </View>
+              )}
+
+              {/* Text Content */}
+              <Text style={faceStyles.subtitle}>You know this person!</Text>
+              <Text style={faceStyles.name}>{face.name}</Text>
+              <Text style={faceStyles.relationship}>Your {face.relationship}</Text>
+
+              {/* Optional: Show confidence */}
+              {face.confidence && (
+                <Text style={faceStyles.confidence}>
+                  {Math.round(face.confidence)}% match
+                </Text>
+              )}
+
+              {/* Dismiss Button */}
+              <TouchableOpacity
+                style={faceStyles.dismissButton}
+                activeOpacity={0.9}
+                onPress={onClose}
+              >
+                <MaterialIcons name="close" size={24} color={C.emerald500} />
+                <Text style={faceStyles.dismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+      </Modal>
     );
   };
 
@@ -811,22 +1024,46 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* Recent Activity */}
-        <SectionTitle>Recent Activity</SectionTitle>
+        {/* ✅ Recent Activity - NOW WITH DYNAMIC DATA */}
+        <View style={{ flexDirection: 'row', marginTop: 26, marginBottom: 12, paddingLeft: 27 }}>
+          <Text style={styles.sectionTitle2}>Recent Activity</Text>
+          <TouchableOpacity
+            onPress={loadRecentActivities}
+            style={{ paddingRight: 22, paddingTop: 2 }}
+            disabled={loadingActivities}
+          >
+            <MaterialIcons 
+              name={loadingActivities ? "hourglass-empty" : "refresh"} 
+              size={24} 
+              color={C.indigo500} 
+            />
+          </TouchableOpacity>
+        </View>
         <View style={{ paddingHorizontal: 24 }}>
-          <RecentRow
-            iconBg={C.purple100}
-            iconColor={C.purple500}
-            title="Susan Recognized"
-            time="5 mins ago"
-          />
-          <RecentRow
-            iconBg={C.green100}
-            iconColor={C.green500}
-            title="Medication taken"
-            time="1 hour ago"
-            style={{ marginTop: 12 }}
-          />
+          {loadingActivities ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator size="large" color={C.indigo500} />
+              <Text style={styles.emptyTitle}>Loading activities...</Text>
+            </View>
+          ) : recentActivities.length > 0 ? (
+            recentActivities.map((activity) => (
+              <View key={activity.id} style={styles.cardRow}>
+                <View style={[styles.iconBox, { backgroundColor: activity.iconBg }]}>
+                  <MaterialIcons name={activity.icon as any} size={24} color={activity.iconColor} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={styles.rowTitleMed}>{activity.title}</Text>
+                  <Text style={styles.rowSmall}>{activity.subtitle}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyCard}>
+              <MaterialIcons name="history" size={48} color={C.slate400} />
+              <Text style={styles.emptyTitle}>No Recent Activity</Text>
+              <Text style={styles.emptySubtitle}>Your activities will appear here</Text>
+            </View>
+          )}
         </View>
 
         {/* Sign out */}
@@ -841,7 +1078,7 @@ useEffect(() => {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ SIMPLE Reminder Popup */}
+        {/* Medication Reminder Popup */}
         <MedicationReminderPopup 
           visible={showReminderNotification} 
           reminder={currentReminder}
@@ -851,13 +1088,20 @@ useEffect(() => {
           }} 
         />
         
-        {/* ✅ CONTEXTUAL Reminder Popup (DO NOT TOUCH) */}
+        {/* Contextual Reminder Popup */}
         <ReminderPopup 
           visible={showContextualReminder} 
           onClose={() => setShowContextualReminder(false)} 
           message={currentContextualReminder} 
         />
       </ScrollView>
+
+      {/* ✅ Face Recognition Popup */}
+      <FaceRecognitionPopup
+        visible={showFacePopup}
+        face={recognizedFace}
+        onClose={hideFaceRecognitionPopup}
+      />
 
       {/* Reminder Details Modal */}
       <Modal
@@ -988,28 +1232,8 @@ useEffect(() => {
   );
 }
 
-/* ---------- Small subcomponents ---------- */
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <Text style={styles.sectionTitle}>{children}</Text>
-);
-
-const RecentRow: React.FC<{
-  iconBg: string;
-  iconColor: string;
-  title: string;
-  time: string;
-  style?: any;
-}> = ({ iconBg, iconColor, title, time, style }) => (
-  <View style={[styles.cardRow, style]}>
-    <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
-      <MaterialIcons name="face" size={24} color={iconColor} />
-    </View>
-    <View style={{ marginLeft: 12, flex: 1 }}>
-      <Text style={styles.rowTitleMed}>{title}</Text>
-      <Text style={styles.rowSmall}>{time}</Text>
-    </View>
-    <MaterialIcons name="more-vert" size={22} color={C.slate400} />
-  </View>
 );
 
 const handleSignOut = async (navigation: Props['navigation']) => {
@@ -1019,7 +1243,6 @@ const handleSignOut = async (navigation: Props['navigation']) => {
   navigation.replace('Login');
 };
 
-// ✅ CONTEXTUAL Reminder Popup Component (DO NOT TOUCH)
 const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?: string }> = ({ visible, onClose, message }) => {
   if (!visible) return null;
 
@@ -1131,6 +1354,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+    marginBottom: 12,
   },
   rowLeft: { flexDirection: 'row', alignItems: 'center' },
   iconBox: {
@@ -1346,7 +1570,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     gap: 4,
-    marginBottom: 16, // Space between timer and icon
+    marginBottom: 16,
   },
   timerText: {
     fontFamily: 'Poppins_500Medium',
@@ -1424,7 +1648,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
   },
   
-  // ✅ CONTEXTUAL Reminder styles (DO NOT TOUCH)
   reminderScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -1482,6 +1705,97 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     fontSize: 18,
     color: '#4f46e5',
+  },
+});
+
+// ✅ Face Recognition Popup Styles
+const faceStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  popupContainer: {
+    width: '100%',
+    maxWidth: 380,
+  },
+  popup: {
+    borderRadius: 28,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#34d399',
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  faceImage: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.5)',
+    marginBottom: 20,
+  },
+  faceImagePlaceholder: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.5)',
+    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subtitle: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    color: '#fff',
+    opacity: 0.8,
+    marginBottom: 4,
+  },
+  name: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 36,
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  relationship: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 20,
+    color: '#fff',
+    opacity: 0.9,
+    marginBottom: 16,
+  },
+  confidence: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.7,
+    marginBottom: 16,
+  },
+  dismissButton: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  dismissText: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 18,
+    color: C.emerald500,
   },
 });
 

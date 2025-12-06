@@ -38,7 +38,7 @@ class MedicationAdherenceService {
         const timeDiff = now.getTime() - reminderDateTime.getTime();
         
         // If more than 5 minutes (300,000 ms) past the reminder time
-        if (timeDiff > 300000) {
+        if (timeDiff > 30000) {
           remindersToMark.push(reminder.id);
           console.log(`⏰ Marking reminder as missed: ${reminder.title} (${reminder.id})`);
         }
@@ -339,6 +339,111 @@ class MedicationAdherenceService {
       console.error('❌ Error in daily maintenance:', error);
     }
   }
+
+  /**
+ * ✅ Get overall weekly adherence percentage (FIXED)
+ */
+async getWeeklyAdherencePercentage(patientId: string): Promise<number> {
+  try {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    // Calculate start of week (Monday)
+    const dayOfWeek = today.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const todayStr = today.toISOString().split('T')[0];
+
+    console.log('📊 Calculating weekly adherence percentage...');
+    console.log('  Week starts:', weekStart.toISOString().split('T')[0]);
+    console.log('  Today:', todayStr);
+
+    // Calculate from daily data for all days up to today
+    let totalTaken = 0;
+    let totalScheduled = 0;
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + i);
+      date.setHours(12, 0, 0, 0);
+      
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Only count days up to and including today
+      if (dateStr <= todayStr) {
+        const metrics = await this.calculateDailyAdherence(patientId, date);
+        
+        console.log(`  ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]} (${dateStr}): ${metrics.taken}/${metrics.scheduled}`);
+        
+        totalTaken += metrics.taken;
+        totalScheduled += metrics.scheduled;
+      } else {
+        console.log(`  ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]} (${dateStr}): [future - skipped]`);
+      }
+    }
+
+    if (totalScheduled === 0) {
+      console.log('📊 Weekly adherence: No medications scheduled this week (so far)');
+      return 0;
+    }
+
+    const percentage = Math.round((totalTaken / totalScheduled) * 100);
+    console.log(`📊 Weekly adherence: ${totalTaken}/${totalScheduled} = ${percentage}%`);
+    
+    // Also update the weekly table for record-keeping
+    this.updateWeeklyTable(patientId, weekStart, totalTaken, totalScheduled);
+    
+    return percentage;
+  } catch (error) {
+    console.error('❌ Error getting weekly adherence percentage:', error);
+    return 0;
+  }
+}
+
+/**
+ * ✅ Helper method to update weekly table asynchronously
+ */
+private async updateWeeklyTable(
+  patientId: string, 
+  weekStart: Date, 
+  taken: number, 
+  scheduled: number
+): Promise<void> {
+  try {
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+
+    const { data: existing } = await supabase
+      .from('med_adherence_weekly')
+      .select('id')
+      .eq('patient_id', patientId)
+      .eq('week_start', weekStartStr)
+      .single();
+
+    const weeklyData = {
+      patient_id: patientId,
+      week_start: weekStartStr,
+      taken: taken,
+      scheduled: scheduled,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existing) {
+      await supabase
+        .from('med_adherence_weekly')
+        .update(weeklyData)
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('med_adherence_weekly')
+        .insert(weeklyData);
+    }
+  } catch (error) {
+    console.error('❌ Error updating weekly table:', error);
+  }
+}  
 }
 
 export default new MedicationAdherenceService();

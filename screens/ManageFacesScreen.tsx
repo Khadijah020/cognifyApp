@@ -1,4 +1,4 @@
-// ManageFacesScreen.tsx - Fixed version
+// screens/ManageFacesScreen.tsx - Fixed version
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';

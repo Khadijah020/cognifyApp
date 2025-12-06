@@ -40,7 +40,7 @@ class FallDetectionService {
   ) {
     const acceleration = Math.sqrt(x * x + y * y + z * z);
 
-    const impactThreshold = 4.0;
+    const impactThreshold = 3.0;
     const stillnessMin = 0.8;
     const stillnessMax = 1.2;
     const stillness = acceleration > stillnessMin && acceleration < stillnessMax;
