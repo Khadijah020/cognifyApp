@@ -6,6 +6,7 @@ import { Appearance } from 'react-native';
 export type ThemeColors = {
   background: string;
   surface: string;
+  surfaceSecondary: string;
   text: string;
   textSecondary: string;
   placeholder: string;
@@ -14,6 +15,9 @@ export type ThemeColors = {
   border: string;
   success: string;
   shadow: string;
+  cardBg: string;
+  iconBg: string;
+  divider: string;
 };
 
 type ThemeContextValue = {
@@ -25,27 +29,35 @@ type ThemeContextValue = {
 const LIGHT: ThemeColors = {
   background: '#f0f4ff',
   surface: '#ffffff',
+  surfaceSecondary: '#f9f8fc',
   text: '#1e293b',
   textSecondary: '#64748b',
   placeholder: '#94a3b8',
-  primary: '#6366f1',
+  primary: '#855ff7',
   primaryLight: '#eef2ff',
   border: '#e5e7eb',
   success: '#22c55e',
   shadow: 'rgba(0,0,0,0.1)',
+  cardBg: '#ffffff',
+  iconBg: '#eae7f4',
+  divider: '#eef2f7',
 };
 
 const DARK: ThemeColors = {
-  background: '#0f0f23',
+  background: '#0f0f1a',
   surface: '#1a1a2e',
-  text: '#e5e7eb',
-  textSecondary: '#9ca3af',
-  placeholder: '#6b7280',
-  primary: '#9333ea',
-  primaryLight: '#2d2d44',
-  border: '#374151',
+  surfaceSecondary: '#16162a',
+  text: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  placeholder: '#64748b',
+  primary: '#a78bfa',
+  primaryLight: '#2d2a4a',
+  border: '#2d2d44',
   success: '#22c55e',
-  shadow: 'rgba(0,0,0,0.5)',
+  shadow: 'rgba(0,0,0,0.4)',
+  cardBg: '#1e1e36',
+  iconBg: '#2d2a4a',
+  divider: '#2d2d44',
 };
 
 const THEME_KEY = 'app_theme'; // 'light' | 'dark'

@@ -127,6 +127,7 @@ const Toggle = ({
 interface PatientInfo {
   full_name: string;
   dementia_stage: string;
+  conditions: string;
 }
 
 interface CaregiverInfo {
@@ -239,10 +240,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // Patient exists, fetch patient details for dementia stage
+      // Patient exists, fetch patient details for dementia stage and conditions
       const { data: detailsData, error: detailsError } = await supabase
         .from('patient_details')
-        .select('dementia_stage')
+        .select('dementia_stage, conditions')
         .eq('patient_id', patientData.id)
         .single();
 
@@ -253,6 +254,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       setPatient({
         full_name: patientData.full_name,
         dementia_stage: detailsData?.dementia_stage || 'N/A',
+        conditions: detailsData?.conditions || '',
       });
       setHasPatient(true);
     } catch (err) {
@@ -331,7 +333,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={{ marginLeft: 14, flex: 1 }}>
               <Text style={[styles.rowTitle, dynamicStyles.text]}>{patient.full_name}</Text>
-              <Text style={[styles.rowSub, dynamicStyles.textSecondary]}>Stage {patient.dementia_stage}</Text>
+              <Text style={[styles.rowSub, dynamicStyles.textSecondary]}>
+                {patient.dementia_stage ? `Stage ${patient.dementia_stage}` : 'N/A'}
+                {patient.conditions ? ` • ${patient.conditions}` : ''}
+              </Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
           </View>

@@ -16,6 +16,7 @@ import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
 import { PatientProvider } from "../contexts/PatientContext";
+import { ThemeProvider } from "../contexts/ThemeContext";
 import AddReminderScreen from "../screens/AddReminderScreen";
 import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
 import EditPatientDetailsScreen from "../screens/EditPatientDetailsScreen";
@@ -229,32 +230,34 @@ useEffect(() => {
   }
 
   return (
-    <PatientProvider>
-      <NavigationContainer ref={navigationRef} linking={linking}>
-        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-          <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
-          <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
-          <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
-          <Stack.Screen name="AddReminder" component={AddReminderScreen} />
-          <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
-          <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-          <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
-          <Stack.Screen name="AddPatient" component={AddPatientScreen} />
-          <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
-          <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
-          <Stack.Screen
-            name="EditPatientDetails"
-            component={EditPatientDetailsScreen}
-            options={{ headerShown: false }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </PatientProvider>
+    <ThemeProvider>
+      <PatientProvider>
+        <NavigationContainer ref={navigationRef} linking={linking}>
+          <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+            <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
+            <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
+            <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
+            <Stack.Screen name="AddReminder" component={AddReminderScreen} />
+            <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
+            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+            <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
+            <Stack.Screen name="AddPatient" component={AddPatientScreen} />
+            <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
+            <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
+            <Stack.Screen
+              name="EditPatientDetails"
+              component={EditPatientDetailsScreen}
+              options={{ headerShown: false }}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </PatientProvider>
+    </ThemeProvider>
   );
 }

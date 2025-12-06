@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
 import { ApiService } from '../services/ApiService';
 
 import {
@@ -75,6 +76,7 @@ const PersonModal = React.memo(({
   setNewPersonData,
   pickImage,
   relationships,
+  isDark,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -84,42 +86,43 @@ const PersonModal = React.memo(({
   setNewPersonData: (data: NewPersonData) => void;
   pickImage: () => Promise<void>;
   relationships: string[];
+  isDark?: boolean;
 }) => (
   <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <View style={s.modalOverlay}>
-      <View style={s.modalCard}>
+      <View style={[s.modalCard, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]}>
         <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>{title}</Text>
+          <Text style={[s.modalTitle, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>{title}</Text>
           <TouchableOpacity onPress={onClose}>
-            <MaterialIcons name="close" size={22} color="#64748b" />
+            <MaterialIcons name="close" size={22} color={isDark ? '#9ca3af' : '#64748b'} />
           </TouchableOpacity>
         </View>
 
         <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
-          <TouchableOpacity style={s.photoTap} onPress={pickImage} activeOpacity={0.8}>
+          <TouchableOpacity style={[s.photoTap, { backgroundColor: isDark ? '#2d2a4a' : '#f8fafc' }]} onPress={pickImage} activeOpacity={0.8}>
             {newPersonData.imageUri ? (
               <Image source={{ uri: newPersonData.imageUri }} style={s.photo} />
             ) : (
               <View style={s.photoPlaceholder}>
-                <MaterialIcons name="add-a-photo" size={34} color={INDIGO} />
-                <Text style={s.photoText}>Tap to add photo</Text>
+                <MaterialIcons name="add-a-photo" size={34} color={isDark ? '#a78bfa' : INDIGO} />
+                <Text style={[s.photoText, { color: isDark ? '#9ca3af' : '#64748b' }]}>Tap to add photo</Text>
               </View>
             )}
           </TouchableOpacity>
 
           <View style={s.field}>
-            <Text style={s.label}>Name *</Text>
+            <Text style={[s.label, { color: isDark ? '#9ca3af' : '#64748b' }]}>Name *</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, { backgroundColor: isDark ? '#2d2a4a' : '#f8fafc', color: isDark ? '#e5e7eb' : '#1e293b', borderColor: isDark ? '#374151' : '#e2e8f0' }]}
               value={newPersonData.name}
               onChangeText={(t) => setNewPersonData({ ...newPersonData, name: t })}
               placeholder="Enter full name"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={isDark ? '#6b7280' : '#94a3b8'}
             />
           </View>
 
           <View style={s.field}>
-            <Text style={s.label}>Relationship *</Text>
+            <Text style={[s.label, { color: isDark ? '#9ca3af' : '#64748b' }]}>Relationship *</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -130,10 +133,10 @@ const PersonModal = React.memo(({
                 return (
                   <TouchableOpacity
                     key={r}
-                    style={[s.chip, active && s.chipActive]}
+                    style={[s.chip, active && s.chipActive, { backgroundColor: isDark ? (active ? '#7c3aed' : '#2d2a4a') : (active ? '#eef2ff' : '#f8fafc'), borderColor: isDark ? (active ? '#7c3aed' : '#374151') : (active ? '#c7d2fe' : '#e2e8f0') }]}
                     onPress={() => setNewPersonData({ ...newPersonData, relationship: r })}
                   >
-                    <Text style={[s.chipText, active && s.chipTextActive]}>{r}</Text>
+                    <Text style={[s.chipText, active && s.chipTextActive, { color: isDark ? (active ? '#ffffff' : '#9ca3af') : (active ? '#6366f1' : '#64748b') }]}>{r}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -142,10 +145,10 @@ const PersonModal = React.memo(({
         </ScrollView>
 
         <View style={s.modalActions}>
-          <TouchableOpacity style={s.cancel} onPress={onClose}>
-            <Text style={s.cancelTxt}>Cancel</Text>
+          <TouchableOpacity style={[s.cancel, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]} onPress={onClose}>
+            <Text style={[s.cancelTxt, { color: isDark ? '#e5e7eb' : '#475569' }]}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.save} onPress={onSave}>
+          <TouchableOpacity style={[s.save, { backgroundColor: isDark ? '#7c3aed' : '#6366f1' }]} onPress={onSave}>
             <Text style={s.saveTxt}>Save</Text>
           </TouchableOpacity>
         </View>
@@ -155,6 +158,7 @@ const PersonModal = React.memo(({
 ));
 
 export default function ManageFacesScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -437,18 +441,18 @@ export default function ManageFacesScreen({ navigation }: Props) {
   };
 
   const renderItem = ({ item }: { item: RecognizedFace }) => (
-    <View style={s.faceCard}>
+    <View style={[s.faceCard, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]}>
       <Image source={{ uri: item.imageUri }} style={s.faceImg} />
       <View style={{ flex: 1, marginLeft: 14 }}>
-        <Text style={s.faceName}>{item.name}</Text>
-        <Text style={s.faceRel}>{item.relationship}</Text>
+        <Text style={[s.faceName, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>{item.name}</Text>
+        <Text style={[s.faceRel, { color: isDark ? '#9ca3af' : '#64748b' }]}>{item.relationship}</Text>
       </View>
       <View style={s.actions}>
-        <TouchableOpacity style={s.iconBtnSoft} onPress={() => openEdit(item)}>
-          <MaterialIcons name="edit" size={18} color="#475569" />
+        <TouchableOpacity style={[s.iconBtnSoft, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]} onPress={() => openEdit(item)}>
+          <MaterialIcons name="edit" size={18} color={isDark ? '#a78bfa' : '#475569'} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.iconBtnSoft} onPress={() => handleDeletePerson(item)}>
-          <MaterialIcons name="delete" size={18} color="#475569" />
+        <TouchableOpacity style={[s.iconBtnSoft, { backgroundColor: isDark ? '#2d2a4a' : '#f1f5f9' }]} onPress={() => handleDeletePerson(item)}>
+          <MaterialIcons name="delete" size={18} color={isDark ? '#f87171' : '#475569'} />
         </TouchableOpacity>
       </View>
     </View>
@@ -456,23 +460,23 @@ export default function ManageFacesScreen({ navigation }: Props) {
 
 
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: BG_FROM }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: isDark ? '#0f0f1a' : BG_FROM }} />;
 
   return (
-    <SafeAreaView style={s.root} edges={['top']}>
+    <SafeAreaView style={[s.root, { backgroundColor: isDark ? '#0f0f1a' : BG_FROM }]} edges={['top']}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#475569" />
+        <TouchableOpacity style={[s.back, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={isDark ? '#9ca3af' : '#475569'} />
         </TouchableOpacity>
-        <Text style={s.title}>Manage Faces</Text>
+        <Text style={[s.title, { color: isDark ? '#e5e7eb' : '#0f172a' }]}>Manage Faces</Text>
         <View style={{ width: 48 }} />
       </View>
 
       {/* Backend Status */}
-      <View style={s.statusBar}>
+      <View style={[s.statusBar, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]}>
         <View style={[s.statusDot, { backgroundColor: backendConnected ? '#10b981' : '#ef4444' }]} />
-        <Text style={s.statusText}>
+        <Text style={[s.statusText, { color: isDark ? '#e5e7eb' : '#334155' }]}>
           {backendConnected ? 'Backend Connected' : 'Backend Offline'}
         </Text>
         {backendConnected && (
@@ -492,22 +496,22 @@ export default function ManageFacesScreen({ navigation }: Props) {
 
       {/* Add new person */}
       <TouchableOpacity
-        style={s.addCard}
+        style={[s.addCard, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]}
         onPress={() => setAddPersonVisible(true)}
         activeOpacity={0.9}
       >
         <View style={s.addInner}>
-          <View style={s.addIcon}>
-            <MaterialIcons name="add-photo-alternate" size={24} color={INDIGO} />
+          <View style={[s.addIcon, { backgroundColor: isDark ? '#2d2a4a' : '#eef2ff' }]}>
+            <MaterialIcons name="add-photo-alternate" size={24} color={isDark ? '#a78bfa' : INDIGO} />
           </View>
-          <Text style={s.addTitle}>Add New Person</Text>
-          <Text style={s.addSub}>Upload a photo and add details</Text>
+          <Text style={[s.addTitle, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>Add New Person</Text>
+          <Text style={[s.addSub, { color: isDark ? '#9ca3af' : '#64748b' }]}>Upload a photo and add details</Text>
         </View>
       </TouchableOpacity>
 
       {/* Recognized Faces */}
       <View style={{ paddingHorizontal: 24, marginTop: 22, flex: 1 }}>
-        <Text style={s.section}>Recognized Faces ({recognizedFaces.length})</Text>
+        <Text style={[s.section, { color: isDark ? '#e5e7eb' : '#334155' }]}>Recognized Faces ({recognizedFaces.length})</Text>
 
         <FlatList
           data={recognizedFaces}
@@ -517,7 +521,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={{ padding: 40, alignItems: 'center' }}>
-              <Text style={{ color: '#94a3b8', fontSize: 16 }}>No faces registered yet</Text>
+              <Text style={{ color: isDark ? '#6b7280' : '#94a3b8', fontSize: 16 }}>No faces registered yet</Text>
             </View>
           }
         />
@@ -550,6 +554,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
         setNewPersonData={setNewPersonData}
         pickImage={pickImage}
         relationships={relationships}
+        isDark={isDark}
       />
       <PersonModal
         visible={editPersonVisible}
@@ -564,6 +569,7 @@ export default function ManageFacesScreen({ navigation }: Props) {
         setNewPersonData={setNewPersonData}
         pickImage={pickImage}
         relationships={relationships}
+        isDark={isDark}
       />
     </SafeAreaView>
   );

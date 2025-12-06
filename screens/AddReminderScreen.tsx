@@ -104,9 +104,12 @@ const AddReminderScreen = ({ navigation, route }: Props) => {
   const minuteScrollRef = useRef<ScrollView>(null);
 
   const [reminderType, setReminderType] = useState('');
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [medication, setMedication] = useState('');
   const [instructions, setInstructions] = useState('');
   const [caregiverNote, setCaregiverNote] = useState('');
+  
+  const reminderTypes = ['Medication', "Doctor's Appointment", 'Meal', 'Event'];
 
   // Parse time string like "09:00 AM" or "21:00:00" into hour, minute, period
   const parseTimeString = (timeStr: string) => {
@@ -399,16 +402,32 @@ const AddReminderScreen = ({ navigation, route }: Props) => {
 
           {/* TYPE */}
           <Text style={[styles.label, dynamicStyles.textSecondary]}>Type</Text>
-          <View style={dynamicStyles.inputContainer}>
+          <TouchableOpacity style={dynamicStyles.inputContainer} onPress={() => setShowTypeDropdown(!showTypeDropdown)}>
             <MaterialCommunityIcons name="bottle-tonic-plus" size={20} color={isDark ? '#9ca3af' : SLATE_500} style={styles.inputIcon} />
-            <TextInput
-              style={dynamicStyles.input}
-              placeholder="Medication"
-              placeholderTextColor={isDark ? '#6b7280' : SLATE_400}
-              value={reminderType}
-              onChangeText={setReminderType}
-            />
-          </View>
+            <Text style={[styles.inputText, dynamicStyles.text, !reminderType && { color: isDark ? '#6b7280' : SLATE_400 }]}>
+              {reminderType || 'Select type'}
+            </Text>
+            <Ionicons name={showTypeDropdown ? "chevron-up" : "chevron-down"} size={20} color={isDark ? '#9ca3af' : SLATE_500} />
+          </TouchableOpacity>
+          {showTypeDropdown && (
+            <View style={[dynamicStyles.card, { marginTop: 8, padding: 0, overflow: 'hidden' }]}>
+              {reminderTypes.map((type, index) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.dropdownItem,
+                    { borderTopWidth: index > 0 ? 1 : 0, borderTopColor: isDark ? '#374151' : '#e5e7eb' }
+                  ]}
+                  onPress={() => {
+                    setReminderType(type);
+                    setShowTypeDropdown(false);
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, dynamicStyles.text]}>{type}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* MEDICATION */}
           <Text style={[styles.label, dynamicStyles.textSecondary]}>Medication</Text>
@@ -909,6 +928,19 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     paddingVertical: 14,
+  },
+  dropdownItem: {
+    padding: 14,
+    backgroundColor: 'transparent',
+  },
+  dropdownItemText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 15,
+  },
+  inputText: {
+    flex: 1,
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 15,
   },
   confirmButton: {
     flex: 1,
