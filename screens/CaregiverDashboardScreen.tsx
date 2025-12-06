@@ -90,6 +90,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>("Loading...");
   const [caregiverName, setCaregiverName] = useState<string>("Caregiver");
+  const [patientPhone, setPatientPhone] = useState<string | null>(null);
   const [alert, setAlert] = useState<any>(null);
   
   /* -------------------- Modal state -------------------- */
@@ -150,6 +151,18 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
           setPatientId(patient.id);
           setPatientName(patient.full_name || 'Patient');
           console.log('✅ Primary patient loaded:', patient.full_name);
+          
+          // Fetch patient phone number
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('phone_number')
+            .eq('id', patient.id)
+            .single();
+          
+          if (patientData?.phone_number) {
+            setPatientPhone(patientData.phone_number);
+            console.log('✅ Patient phone loaded');
+          }
         } else {
           console.log('⚠️ No patient linked to this caregiver');
           setPatientName('No Patient Linked');
@@ -311,6 +324,42 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
       console.error('❌ Error loading cognition level:', error);
     } finally {
       setLoadingCognition(false);
+    }
+  };
+
+  const handleCallPatient = async () => {
+    try {
+      if (patientPhone) {
+        // Use cached phone number if available
+        Linking.openURL(`tel:${patientPhone}`);
+      } else if (patientId) {
+        // Fetch phone number if not cached
+        const { data, error } = await supabase
+          .from('patients')
+          .select('phone_number')
+          .eq('id', patientId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching patient phone:', error);
+          Alert.alert('Error', 'Failed to fetch patient phone number.');
+          return;
+        }
+
+        const phoneNumber = data?.phone_number;
+        if (!phoneNumber) {
+          Alert.alert('Missing Info', 'Phone number not available for this patient.');
+          return;
+        }
+
+        setPatientPhone(phoneNumber);
+        Linking.openURL(`tel:${phoneNumber}`);
+      } else {
+        Alert.alert('Error', 'Patient information not available.');
+      }
+    } catch (err) {
+      console.error('Error calling patient:', err);
+      Alert.alert('Error', 'Failed to open dialer.');
     }
   };
 
@@ -539,7 +588,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 </View>
               </View>
               <View style={styles.rowBetweenBtns}>
-                <GhostBtn icon="phone" text="   Call Patient" />
+                <GhostBtn icon="phone" text="   Call Patient" onPress={handleCallPatient} />
                 <GhostBtn 
                 icon="pin-drop" 
                 text="  Check Location"
