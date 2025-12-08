@@ -81,11 +81,11 @@ class PatientActivityService {
 
       return reminders
         .filter(r => {
-          // Only include reminders from last 24 hours
+          // Only include reminders from last 1 hour
           const reminderTime = this.parseReminderDateTime(r.date, r.time);
           const now = new Date();
           const hoursDiff = (now.getTime() - reminderTime.getTime()) / (1000 * 60 * 60);
-          return hoursDiff <= 24 && hoursDiff >= 0;
+          return hoursDiff <= 1 && hoursDiff >= 0;
         })
         .map(r => {
           const isTaken = r.status === 'completed';
@@ -116,15 +116,15 @@ class PatientActivityService {
     patientId: string
   ): Promise<PatientActivity[]> {
     try {
-      // Get falls from last 24 hours
-      const yesterday = new Date();
-      yesterday.setHours(yesterday.getHours() - 24);
+      // Get falls from last 1 hour
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
       const { data: falls, error } = await supabase
         .from('fall_alerts')
         .select('*')
         .eq('patient_id', patientId)
-        .gte('created_at', yesterday.toISOString())
+        .gte('created_at', oneHourAgo.toISOString())
         .order('created_at', { ascending: false })
         .limit(5);
 

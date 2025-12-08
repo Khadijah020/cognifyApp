@@ -920,7 +920,18 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <Text style={styles.greetSmall}>Good Morning</Text>
             <Text style={styles.greetName}>{patientName}</Text>
           </View>
-          <Image source={{ uri: AVATAR }} style={styles.avatar} />
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {patientName
+                ? patientName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'P'}
+            </Text>
+          </View>
         </View>
 
         {/* Call My Caregiver */}
@@ -1319,6 +1330,14 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     borderWidth: 2,
     borderColor: C.indigo300,
+    backgroundColor: '#818cf8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 20,
+    color: '#fff',
   },
 
   callBtn: {

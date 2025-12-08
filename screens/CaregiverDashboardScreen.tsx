@@ -551,12 +551,18 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 <Text style={[styles.h1, { color: isDark ? '#e5e7eb' : '#1e293b' }]}>Dashboard</Text>
               </View>
               <View style={styles.row}>
-                <Image
-                  source={{
-                    uri: "https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100",
-                  }}
-                  style={styles.avatar}
-                />
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {caregiverName
+                      ? caregiverName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2)
+                      : 'C'}
+                  </Text>
+                </View>
                 <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}
                 onPress={() => navigation.navigate('Settings')}>
                   <MaterialIcons name="settings" size={28} color={isDark ? '#9ca3af' : '#475569'} />
@@ -1538,7 +1544,8 @@ const styles = StyleSheet.create({
   smallWhite: { fontSize: 12, fontFamily: "Poppins_400Regular", color: "#fff" },
   smallMuted: { fontSize: 14, fontFamily: "Poppins_400Regular", color: "#64748b", marginTop: -4 },
 
-  avatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: "#a5b4fc", marginRight: 12, marginBottom: 10 },
+  avatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: "#a5b4fc", marginRight: 12, marginBottom: 10, backgroundColor: "#8486f0ff", alignItems: "center", justifyContent: "center" },
+  avatarText: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: "#fff" },
   iconBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: 10 },
 
   patientCard: { borderRadius: 24, padding: 25, shadowOpacity: 0.2, shadowRadius: 10 },
