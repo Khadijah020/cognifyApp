@@ -3,7 +3,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Animated,
@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../src/lib/supabase';
 
 import {
     Poppins_400Regular,
@@ -38,7 +39,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
     Poppins_700Bold,
   });
 
-  const [currentEmail, setCurrentEmail] = useState('emily.carter@example.com');
+  const [currentEmail, setCurrentEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +49,37 @@ export default function ChangeEmailScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const bannerOpacity = useState(new Animated.Value(0))[0];
   const bannerY = useState(new Animated.Value(-50))[0];
+
+  useEffect(() => {
+    const loadCaregiverEmail = async () => {
+      try {
+        // First try Supabase caregiver email
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (!authError && user) {
+          const { data, error } = await supabase
+            .from('caregivers')
+            .select('email')
+            .eq('id', user.id)
+            .single();
+
+          if (!error && data?.email) {
+            setCurrentEmail(data.email);
+            return;
+          }
+        }
+
+        // Fallback to locally cached email
+        const cached = await AsyncStorage.getItem('userEmail');
+        if (cached) {
+          setCurrentEmail(cached);
+        }
+      } catch (err) {
+        console.warn('Unable to load caregiver email:', err);
+      }
+    };
+
+    loadCaregiverEmail();
+  }, []);
 
   const validateEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
