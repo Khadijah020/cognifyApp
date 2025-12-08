@@ -11,19 +11,19 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  Linking,
-  Modal,
-  PanResponder,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    Linking,
+    Modal,
+    PanResponder,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import FallDetectionService from "../services/FallDetectionService";
@@ -35,11 +35,11 @@ import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 import axios from 'axios';
 
@@ -109,7 +109,7 @@ const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const BACKEND_URL = 'https://bfabda320daf.ngrok-free.app'; // ⚠️ Update this to match your backend
+const BACKEND_URL = 'https://411c0df88fb6.ngrok-free.app'; // ⚠️ Update this to match your backend
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
