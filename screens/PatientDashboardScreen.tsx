@@ -387,8 +387,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         const dueReminders = allReminders.filter(r => {
           const reminderTime = ReminderHelperService.parseReminderDateTime(r.date, r.time);
           const timeDiff = reminderTime.getTime() - now.getTime();
-          
-          return timeDiff >= -30 * 1000 && timeDiff < 2 * 60 * 1000;
+          // Show only in a tight window: 30s after due to 10s before due
+          return timeDiff >= -30 * 1000 && timeDiff <= 10 * 1000;
         });
 
         if (dueReminders.length > 0 && !showReminderNotification) {
@@ -420,7 +420,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     };
 
     checkForDueReminders();
-    const reminderCheckInterval = setInterval(checkForDueReminders, 20 * 1000);
+    // Poll more frequently so the 10s window is not missed
+    const reminderCheckInterval = setInterval(checkForDueReminders, 5 * 1000);
 
     return () => clearInterval(reminderCheckInterval);
   }, [patientId, showReminderNotification]);
