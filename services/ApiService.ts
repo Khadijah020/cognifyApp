@@ -1,5 +1,9 @@
 // ⚠️ HARDCODED NGROK URL - Replace with your actual ngrok URL
+<<<<<<< HEAD
 const NGROK_BASE_URL = 'https://411c0df88fb6.ngrok-free.app';
+=======
+const NGROK_BASE_URL = 'https://3be3dc176e4c.ngrok-free.app';
+>>>>>>> b5c56e052d5998fb49ff0fa8db4bd28961b02f1b
 
 export class ApiService {
   /**

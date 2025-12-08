@@ -11,19 +11,19 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Image,
-    Linking,
-    Modal,
-    PanResponder,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Image,
+  Linking,
+  Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import FallDetectionService from "../services/FallDetectionService";
@@ -35,11 +35,11 @@ import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
 
 import {
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-    useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  useFonts,
 } from '@expo-google-fonts/poppins';
 import axios from 'axios';
 
