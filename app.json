@@ -19,12 +19,14 @@
         "backgroundColor": "#E6F4FE"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ahmad1015.cognify"
     },
     "plugins": [
       [
         "expo-splash-screen",
         {
+          "image": "./assets/images/splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -33,7 +35,8 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "onnxruntime-react-native"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -41,7 +44,10 @@
     },
     "extra": {
       "supabaseUrl": "https://xlusfzcawhoqzmdfgkwj.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdXNmemNhd2hvcXptZGZna3dqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTQxNzksImV4cCI6MjA3NDk5MDE3OX0.63Mjr3oWCgGlCGANKTVt9DfByxZPSzCBIAFtfX5zyxw"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdXNmemNhd2hvcXptZGZna3dqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTQxNzksImV4cCI6MjA3NDk5MDE3OX0.63Mjr3oWCgGlCGANKTVt9DfByxZPSzCBIAFtfX5zyxw",
+      "eas": {
+        "projectId": "41e9f5cd-e3c2-47ed-a969-157d0486fd7d"
+      }
     }
   }
 }

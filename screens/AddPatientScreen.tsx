@@ -58,7 +58,7 @@ export default function AddPatientScreen({ navigation }: Props) {
 
   // form state
   const [email, setEmail] = useState('');
-const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [dementiaStage, setDementiaStage] = useState('');
   const [dob, setDob] = useState('');
@@ -73,19 +73,19 @@ const [password, setPassword] = useState('');
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
 
   useEffect(() => {
-  const fetchCaregiverId = async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error) {
-      console.error("Error fetching user:", error.message);
-      return;
-    }
-    if (data?.user) {
-      setCaregiverId(data.user.id); // ← store caregiver UID
-      console.log("Caregiver UID set:", data.user.id);
-    }
-  };
-  fetchCaregiverId();
-}, []);
+    const fetchCaregiverId = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Error fetching user:", error.message);
+        return;
+      }
+      if (data?.user) {
+        setCaregiverId(data.user.id); // ← store caregiver UID
+        console.log("Caregiver UID set:", data.user.id);
+      }
+    };
+    fetchCaregiverId();
+  }, []);
 
   useEffect(() => {
     // ask media permission once
@@ -107,64 +107,66 @@ const [password, setPassword] = useState('');
   };
 
   const savePatient = async () => {
-  const mail = email.trim().toLowerCase();
-  if (!fullName.trim() || !mail || !password) {
-    Alert.alert('Missing Info', 'Please enter name, email, and password.');
-    return;
-  }
-
-  try {
-    console.log('== SENDING PATIENT REGISTRATION REQUEST ==');
-
-    // 1️⃣ Get logged-in caregiver ID (from Supabase session)
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      throw new Error('Could not get caregiver session.');
+    const mail = email.trim().toLowerCase();
+    if (!fullName.trim() || !mail || !password) {
+      Alert.alert('Missing Info', 'Please enter name, email, and password.');
+      return;
     }
 
-    const caregiverId = userData.user.id;
+    try {
+      console.log('== SENDING PATIENT REGISTRATION REQUEST ==');
 
-    // 2️⃣ Prepare the request body
-    const payload = {
-  caregiver_id: caregiverId,
-  email: mail,
-  password,
-  full_name: fullName,
-  dementia_stage: dementiaStage,
-  dob,
-  address,
-  emergency_contact: emergencyContact,
-  allergies,
-  medications,
-  conditions,
-  notes: careNotes,
-  likes,
-  avatar_uri: avatarUri,
-};
+      // 1️⃣ Get logged-in caregiver ID (from Supabase session)
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        throw new Error('Could not get caregiver session.');
+      }
+
+      const caregiverId = userData.user.id;
+
+      // 2️⃣ Prepare the request body
+      const payload = {
+        caregiver_id: caregiverId,
+        email: mail,
+        password,
+        full_name: fullName,
+        dementia_stage: dementiaStage,
+        dob,
+        address,
+        emergency_contact: emergencyContact,
+        allergies,
+        medications,
+        conditions,
+        notes: careNotes,
+        likes,
+        avatar_uri: avatarUri,
+      };
 
 
-    // 3️⃣ Send request to your backend endpoint
-    const response = await fetch('https://3be3dc176e4c.ngrok-free.app/register_patient', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+      // 3️⃣ Send request to your backend endpoint
+      const response = await fetch('https://f3ef-34-50-168-120.ngrok-free.app/register_patient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    const result = await response.json();
-    console.log('Backend response:', result);
+      const textResult = await response.text();
+      console.log('Raw Backend response:', textResult);
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to add patient.');
+      const result = JSON.parse(textResult);
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to add patient.');
+      }
+
+      Alert.alert('Success', 'Patient added successfully!', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (err: any) {
+      console.error('Error adding patient:', err.message);
+      Alert.alert('Error', err.message);
     }
-
-    Alert.alert('Success', 'Patient added successfully!', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
-  } catch (err: any) {
-    console.error('Error adding patient:', err.message);
-    Alert.alert('Error', err.message);
-  }
-};
+  };
 
 
 
@@ -207,15 +209,15 @@ const [password, setPassword] = useState('');
             </View>
 
             <View style={{ marginTop: 24 }}>
-<Input label="Email" placeholder="Enter email" value={email} onChangeText={setEmail} />
-<Spacer />
-<Input label="Password" placeholder="Enter password" value={password} onChangeText={setPassword} />
+              <Input label="Email" placeholder="Enter email" value={email} onChangeText={setEmail} />
+              <Spacer />
+              <Input label="Password" placeholder="Enter password" value={password} onChangeText={setPassword} />
               <View style={{ height: 12 }} />
 
 
               <Input label="Full Name" placeholder="Enter full name" value={fullName} onChangeText={setFullName} />
               <View style={{ height: 12 }} />
-              
+
               <Input
                 label="Dementia Stage"
                 placeholder="e.g., Stage 4 Dementia"
