@@ -4,19 +4,20 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditPatientDetails'>;
@@ -80,6 +81,7 @@ interface EditableField {
 }
 
 const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
+  const { colors, isDark } = useTheme();
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -263,19 +265,21 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
 
   const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
 
+  const gradientColors = isDark ? ['#0f0f1a', '#1a1a2e'] : [COLORS.bgFrom, COLORS.bgTo];
+
   if (loading) {
     return (
-      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={COLORS.btnTo} />
-        <Text style={{ marginTop: 12, color: COLORS.slate500 }}>Loading patient details...</Text>
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#0f0f1a' : COLORS.bgTo }]}>
+        <ActivityIndicator size="large" color={isDark ? '#a78bfa' : COLORS.btnTo} />
+        <Text style={{ marginTop: 12, color: isDark ? '#9ca3af' : COLORS.slate500 }}>Loading patient details...</Text>
       </View>
     );
   }
 
   if (!patient) {
     return (
-      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ color: COLORS.slate500 }}>No patient details found.</Text>
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#0f0f1a' : COLORS.bgTo }]}>
+        <Text style={{ color: isDark ? '#9ca3af' : COLORS.slate500 }}>No patient details found.</Text>
       </View>
     );
   }
@@ -341,15 +345,26 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={[COLORS.bgFrom, COLORS.bgTo]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back-ios-new" size={20} color={COLORS.slate600} />
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDark ? '#1e1e36' : COLORS.white }]} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back-ios-new" size={20} color={isDark ? '#9ca3af' : COLORS.slate600} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Patient Details</Text>
-        <View style={{ width: 32 }} />
+        <Text style={[styles.headerTitle, { color: isDark ? '#e5e7eb' : COLORS.slate800 }]}>Edit Patient Details</Text>
+        <View style={[styles.headerAvatar, { backgroundColor: isDark ? '#7c3aed' : '#6366f1' }]}>
+          <Text style={styles.headerAvatarText}>
+            {patient?.full_name
+              ? patient.full_name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2)
+              : 'PT'}
+          </Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -362,14 +377,14 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           {/* Profile Card */}
-          <View style={[styles.card, { marginTop: 8 }]}>
+          <View style={[styles.card, { marginTop: 8, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
             <View style={{ alignItems: 'center' }}>
               <View style={{ position: 'relative' }}>
-                <View style={styles.avatar}>
+                <View style={[styles.avatar, { backgroundColor: isDark ? '#2d2a4a' : '#e2e8f0', borderColor: isDark ? '#1e1e36' : COLORS.white }]}>
                   {avatar ? (
                     <Image source={{ uri: avatar }} style={styles.avatarImg} />
                   ) : (
-                    <MaterialIcons name="person" size={64} color={COLORS.slate400} />
+                    <MaterialIcons name="person" size={64} color={isDark ? '#6b7280' : COLORS.slate400} />
                   )}
                 </View>
                 <TouchableOpacity
@@ -381,14 +396,14 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.name}>{safe(patient?.full_name)}</Text>
-              <Text style={styles.stage}>Stage: {safe(patient?.dementia_stage)}</Text>
+              <Text style={[styles.name, { color: isDark ? '#e5e7eb' : COLORS.slate800 }]}>{safe(patient?.full_name)}</Text>
+              <Text style={[styles.stage, { color: isDark ? '#9ca3af' : COLORS.slate500 }]}>Stage: {safe(patient?.dementia_stage)}</Text>
             </View>
           </View>
 
           {/* Personal Information */}
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-          <View style={[styles.card, { gap: 20 }]}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Personal Information</Text>
+          <View style={[styles.card, { gap: 20, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
             {editableFields.slice(0, 4).map((field) => (
               <EditableRow
                 key={field.key}
@@ -401,13 +416,14 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
                 onCancel={cancelEdit}
                 onChangeText={setEditValue}
                 isSaving={saving}
+                isDark={isDark}
               />
             ))}
           </View>
 
           {/* Medical Details */}
-          <Text style={styles.sectionTitle}>Medical Details</Text>
-          <View style={[styles.card, { gap: 20 }]}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Medical Details</Text>
+          <View style={[styles.card, { gap: 20, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
             {editableFields.slice(4, 7).map((field) => (
               <EditableRow
                 key={field.key}
@@ -420,13 +436,14 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
                 onCancel={cancelEdit}
                 onChangeText={setEditValue}
                 isSaving={saving}
+                isDark={isDark}
               />
             ))}
           </View>
 
           {/* Preferences & Notes */}
-          <Text style={styles.sectionTitle}>Preferences & Notes</Text>
-          <View style={[styles.card, { gap: 20 }]}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Preferences & Notes</Text>
+          <View style={[styles.card, { gap: 20, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
             {editableFields.slice(7).map((field) => (
               <EditableRow
                 key={field.key}
@@ -439,6 +456,7 @@ const EditPatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
                 onCancel={cancelEdit}
                 onChangeText={setEditValue}
                 isSaving={saving}
+                isDark={isDark}
               />
             ))}
           </View>
@@ -458,6 +476,7 @@ interface EditableRowProps {
   onCancel: () => void;
   onChangeText: (text: string) => void;
   isSaving: boolean;
+  isDark?: boolean;
 }
 
 const EditableRow: React.FC<EditableRowProps> = ({
@@ -470,32 +489,33 @@ const EditableRow: React.FC<EditableRowProps> = ({
   onCancel,
   onChangeText,
   isSaving,
+  isDark,
 }) => {
   if (isEditing) {
     return (
       <View>
-        <Text style={styles.label}>{field.label}</Text>
-        <View style={[styles.inputWrap]}>
+        <Text style={[styles.label, { color: isDark ? '#9ca3af' : COLORS.slate500 }]}>{field.label}</Text>
+        <View style={[styles.inputWrap, { backgroundColor: isDark ? '#2d2a4a' : '#f8fafc', borderColor: isDark ? '#6366f1' : COLORS.indigo500 }]}>
           <TextInput
             value={editValue}
             onChangeText={onChangeText}
-            style={[styles.editInput, field.multiline && { height: 100, textAlignVertical: 'top' }]}
+            style={[styles.editInput, field.multiline && { height: 100, textAlignVertical: 'top' }, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}
             multiline={field.multiline}
             autoFocus
             editable={!isSaving}
-            placeholderTextColor={COLORS.slate500}
+            placeholderTextColor={isDark ? '#6b7280' : COLORS.slate500}
           />
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: COLORS.gray200 }]}
+            style={[styles.actionBtn, { backgroundColor: isDark ? '#374151' : COLORS.gray200 }]}
             onPress={onCancel}
             disabled={isSaving}
           >
-            <Text style={[styles.actionBtnText, { color: COLORS.slate600 }]}>Cancel</Text>
+            <Text style={[styles.actionBtnText, { color: isDark ? '#e5e7eb' : COLORS.slate600 }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: COLORS.btnTo }]}
+            style={[styles.actionBtn, { backgroundColor: isDark ? '#7c3aed' : COLORS.btnTo }]}
             onPress={onSave}
             disabled={isSaving}
           >
@@ -514,11 +534,11 @@ const EditableRow: React.FC<EditableRowProps> = ({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
       <View style={[styles.iconBg, { backgroundColor: field.bg }]}>{field.icon}</View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.label}>{field.label}</Text>
-        <Text style={styles.value}>{value}</Text>
+        <Text style={[styles.label, { color: isDark ? '#9ca3af' : COLORS.slate500 }]}>{field.label}</Text>
+        <Text style={[styles.value, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>{value}</Text>
       </View>
       <TouchableOpacity onPress={onEdit} style={styles.editBtn} disabled={isSaving}>
-        <MaterialIcons name="edit" size={20} color={COLORS.slate500} />
+        <MaterialIcons name="edit" size={20} color={isDark ? '#9ca3af' : COLORS.slate500} />
       </TouchableOpacity>
     </View>
   );
@@ -539,6 +559,26 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: COLORS.slate800,
     fontFamily: 'Poppins_700Bold',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  headerAvatarText: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 14,
+    color: '#ffffff',
   },
   card: {
     backgroundColor: COLORS.white,

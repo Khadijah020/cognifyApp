@@ -18,15 +18,25 @@ serve(async (req) => {
       global: { headers: { Authorization: `Bearer ${jwt}` } }
     });
 
-    const { data: me } = await caregiverClient
-      .from("profiles")
-      .select("id, role")
-      .eq("id", (await caregiverClient.auth.getUser()).data.user?.id)
-      .single();
+    // Get the authenticated user
+    const { data: { user: authUser }, error: authError } = await caregiverClient.auth.getUser();
+    
+    if (authError || !authUser) {
+      return new Response(JSON.stringify({ error: "Authentication required." }), { status: 401 });
+    }
 
-    if (!me || me.role !== "caregiver") {
+    // Check if user is a caregiver by checking the caregivers table
+    const { data: caregiver, error: cgError } = await caregiverClient
+      .from("caregivers")
+      .select("id")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (cgError || !caregiver) {
       return new Response(JSON.stringify({ error: "Only caregivers can create patients." }), { status: 403 });
     }
+
+    const caregiverId = caregiver.id;
 
     const body = await req.json();
     const { email, password, display_name } = body as {
@@ -49,15 +59,15 @@ serve(async (req) => {
     const patientId = createdUser.user.id;
 
     // 2) Insert caregiver/patient rows
-    // ensure caregiver is in caregivers table
+    // ensure caregiver is in caregivers table (should already exist, but just in case)
     await admin.from("caregivers")
-      .insert({ id: me.id })
+      .insert({ id: caregiverId })
       .onConflict("id")
       .ignore();
 
     // create patient row linked to caregiver
     const { error: patErr } = await admin.from("patients")
-      .insert({ id: patientId, caregiver_id: me.id });
+      .insert({ id: patientId, caregiver_id: caregiverId });
     if (patErr) throw patErr;
 
     // create empty details row (optional)

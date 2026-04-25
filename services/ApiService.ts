@@ -1,12 +1,34 @@
-// ⚠️ HARDCODED NGROK URL - Replace with your actual ngrok URL
-const NGROK_BASE_URL = 'https://3be3dc176e4c.ngrok-free.app';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Default ngrok URL - can be overridden by user in settings
+const DEFAULT_NGROK_URL = 'https://a740dc4389a4.ngrok-free.app';
+const NGROK_URL_STORAGE_KEY = 'cognify_ngrok_url';
+
+// In-memory cache for the URL (to avoid async calls every time)
+let cachedNgrokUrl: string | null = null;
 
 export class ApiService {
   /**
-   * Get the ngrok URL (hardcoded for now, will use DB later)
+   * Initialize the cached URL from storage (call this on app start)
+   */
+  static async initialize(): Promise<void> {
+    try {
+      const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
+      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      console.log('📡 ApiService initialized with URL:', cachedNgrokUrl);
+    } catch (error) {
+      console.error('Error initializing ApiService:', error);
+      cachedNgrokUrl = DEFAULT_NGROK_URL;
+    }
+  }
+
+  /**
+   * Get the ngrok URL (sync - uses cached value)
    */
   static getNgrokUrl(): string {
-    return NGROK_BASE_URL;
+    const url = cachedNgrokUrl || DEFAULT_NGROK_URL;
+    console.log('📡 getNgrokUrl() returning:', url);
+    return url;
   }
 
   /**
@@ -15,7 +37,76 @@ export class ApiService {
   static getApiEndpoint(path: string): string {
     const baseUrl = this.getNgrokUrl();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `${baseUrl}${cleanPath}`;
+    const fullUrl = `${baseUrl}${cleanPath}`;
+    console.log('🔗 getApiEndpoint:', fullUrl);
+    return fullUrl;
+  }
+
+  /**
+   * Get the ngrok URL (async - ALWAYS reads fresh from storage)
+   */
+  static async getNgrokUrlAsync(): Promise<string> {
+    try {
+      const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
+      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      return cachedNgrokUrl;
+    } catch (error) {
+      console.error('Error getting ngrok URL:', error);
+      return cachedNgrokUrl || DEFAULT_NGROK_URL;
+    }
+  }
+
+  /**
+   * Force refresh the cached URL from storage
+   */
+  static async refreshCache(): Promise<void> {
+    try {
+      const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
+      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      console.log('🔄 ApiService cache refreshed:', cachedNgrokUrl);
+    } catch (error) {
+      console.error('Error refreshing cache:', error);
+    }
+  }
+
+  /**
+   * Save the ngrok URL to storage and update cache
+   */
+  static async saveNgrokUrl(url: string): Promise<void> {
+    try {
+      // Remove trailing slash if present
+      const cleanUrl = url.replace(/\/+$/, '');
+      await AsyncStorage.setItem(NGROK_URL_STORAGE_KEY, cleanUrl);
+      cachedNgrokUrl = cleanUrl;
+      console.log('✅ Ngrok URL saved:', cleanUrl);
+    } catch (error) {
+      console.error('Error saving ngrok URL:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear the saved ngrok URL (reverts to default)
+   */
+  static async clearNgrokUrl(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(NGROK_URL_STORAGE_KEY);
+      cachedNgrokUrl = DEFAULT_NGROK_URL;
+      console.log('🗑️ Ngrok URL cleared, using default');
+    } catch (error) {
+      console.error('Error clearing ngrok URL:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get default headers for API calls (includes ngrok bypass header)
+   */
+  static getHeaders(contentType: string = 'application/json'): Record<string, string> {
+    return {
+      'Content-Type': contentType,
+      'ngrok-skip-browser-warning': 'true', // Skip ngrok interstitial page
+    };
   }
 
   /**
@@ -40,6 +131,7 @@ export class ApiService {
         body: formData,
         headers: {
           'Content-Type': 'multipart/form-data',
+          'ngrok-skip-browser-warning': 'true',
         },
       });
 

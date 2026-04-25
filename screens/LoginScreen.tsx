@@ -1,23 +1,24 @@
 // src/screens/LoginScreen.tsx
 import {
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_700Bold,
-  useFonts,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_700Bold,
+    useFonts,
 } from "@expo-google-fonts/space-grotesk";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppLoading from "expo-app-loading";
+import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
-  Alert,
-  Platform,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { RootStackParamList } from "../app/App";
 import { supabase } from "../src/lib/supabase";
@@ -54,31 +55,17 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
-    // 1) Prefer profiles.role (fast path)
-    const { data: prof, error: profErr } = await supabase
-      .from("profiles")
-      .select("role")
+    let role: "caregiver" | "patient" | undefined;
+
+    // 1) Check caregivers table
+    const { data: cg } = await supabase
+      .from("caregivers")
+      .select("id")
       .eq("id", uid)
       .maybeSingle();
+    if (cg) role = "caregiver";
 
-    if (profErr) {
-      // Not fatal—try fallbacks next
-      console.warn("profiles.role lookup error:", profErr.message);
-    }
-
-    let role = prof?.role as "caregiver" | "patient" | undefined;
-
-    // 2) Fallback: caregivers table
-    if (!role) {
-      const { data: cg } = await supabase
-        .from("caregivers")
-        .select("id")
-        .eq("id", uid)
-        .maybeSingle();
-      if (cg) role = "caregiver";
-    }
-
-    // 3) Fallback: patients table
+    // 2) Check patients table
     if (!role) {
       const { data: pt } = await supabase
         .from("patients")
@@ -88,17 +75,12 @@ export default function LoginScreen({ navigation }: Props) {
       if (pt) role = "patient";
     }
 
-    // 🔹 New: fetch the signed-in user and check metadata role
-const {
-  data: { user: freshUser },
-  error: userErr,
-} = await supabase.auth.getUser();
-
-if (userErr) {
-  Alert.alert("Error", "Failed to fetch user info");
-  return;
-}
-
+    // 3) Fallback: check user metadata
+    if (!role) {
+      const metaRole = authUser.user?.user_metadata?.role;
+      if (metaRole === "patient") role = "patient";
+      else if (metaRole === "caregiver") role = "caregiver";
+    }
 
 if (role === "patient") {
   await AsyncStorage.setItem("role", "patient");
@@ -156,7 +138,23 @@ if (role === "patient") {
     await getRoleAndNavigate();
 
   } catch (e: any) {
-    Alert.alert("Login Error", e?.message ?? "Something went wrong.");
+    // Check for network/connection errors
+    const errorMessage = e?.message?.toLowerCase() || '';
+    if (
+      errorMessage.includes('network') ||
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('connection') ||
+      errorMessage.includes('econnrefused') ||
+      e?.name === 'TypeError' // Often indicates network failure
+    ) {
+      Alert.alert(
+        "Connection Error",
+        "Unable to connect to the server. Please check your internet connection and try again."
+      );
+    } else {
+      Alert.alert("Login Error", e?.message ?? "Something went wrong.");
+    }
   } finally {
     setSubmitting(false);
   }
@@ -168,15 +166,38 @@ if (role === "patient") {
       Alert.alert("Enter Email", "Please enter your email first.");
       return;
     }
+
     try {
+      // Check if this email belongs to a patient or caregiver
+      const { data: patientData } = await supabase
+        .from("patients")
+        .select("id, full_name")
+        .eq("email", mail)
+        .maybeSingle();
+
+      // If it's a patient, tell them to contact their caregiver
+      if (patientData) {
+        Alert.alert(
+          "Contact Your Caregiver",
+          "As a patient, please contact your caregiver to reset your password.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      // For caregivers (or unknown emails), use Supabase reset
+      // Create the redirect URL for the app
+      const redirectUrl = Linking.createURL('reset-password');
+      console.log('Password reset redirect URL:', redirectUrl);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(mail, {
-        // If you have deep linking set up, add your redirect:
-        // redirectTo: "cognify://reset-password"
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
+
       Alert.alert(
-        "Check your email",
-        "We sent a password reset link if an account exists for that address."
+        "Check Your Email",
+        "We've sent a password reset link to your email address. Please check your inbox and spam folder."
       );
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "Failed to send reset email.");
@@ -222,7 +243,7 @@ if (role === "patient") {
       </View>
 
       {/* Forgot password */}
-      <TouchableOpacity onPress={handleForgotPassword} disabled={submitting}>
+      <TouchableOpacity onPress={handleForgotPassword} disabled={submitting} style={styles.linkWrap}>
         <Text style={styles.link}>Forgot password?</Text>
       </TouchableOpacity>
 
@@ -287,6 +308,7 @@ const styles = StyleSheet.create({
   },
   fieldWrap: {
     marginBottom: Platform.OS === "ios" ? 20 : 12,
+    paddingHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   input: {
     backgroundColor: COLORS.inputBg,
@@ -296,6 +318,9 @@ const styles = StyleSheet.create({
     fontFamily: "SpaceGrotesk_400Regular",
     fontSize: 16,
     color: COLORS.text,
+  },
+  linkWrap: {
+    paddingHorizontal: Platform.OS === "ios" ? 20 : 0,
   },
   link: {
     fontFamily: "SpaceGrotesk_400Regular",

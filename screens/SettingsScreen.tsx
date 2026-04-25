@@ -1,7 +1,8 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -126,6 +127,13 @@ const Toggle = ({
 interface PatientInfo {
   full_name: string;
   dementia_stage: string;
+  conditions: string;
+}
+
+interface CaregiverInfo {
+  full_name: string;
+  email: string;
+  phone: string;
 }
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
@@ -143,6 +151,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [patientLoading, setPatientLoading] = useState(true);
   const [hasPatient, setHasPatient] = useState(false);
+  const [caregiver, setCaregiver] = useState<CaregiverInfo | null>(null);
 
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerY = useRef(new Animated.Value(-50)).current;
@@ -159,8 +168,46 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    fetchCaregiverInfo();
     fetchPatientInfo();
   }, []);
+
+  // Refresh caregiver info when the screen comes into focus (e.g., after editing profile)
+  useFocusEffect(
+    useCallback(() => {
+      fetchCaregiverInfo();
+      fetchPatientInfo();
+    }, [])
+  );
+
+  const fetchCaregiverInfo = async () => {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.warn('No user session found');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('caregivers')
+        .select('full_name, email, phone')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching caregiver:', error.message);
+        return;
+      }
+
+      setCaregiver({
+        full_name: data.full_name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+      });
+    } catch (err) {
+      console.error('Unexpected error fetching caregiver:', err);
+    }
+  };
 
   const fetchPatientInfo = async () => {
     setPatientLoading(true);
@@ -193,10 +240,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // Patient exists, fetch patient details for dementia stage
+      // Patient exists, fetch patient details for dementia stage and conditions
       const { data: detailsData, error: detailsError } = await supabase
         .from('patient_details')
-        .select('dementia_stage')
+        .select('dementia_stage, conditions')
         .eq('patient_id', patientData.id)
         .single();
 
@@ -207,6 +254,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       setPatient({
         full_name: patientData.full_name,
         dementia_stage: detailsData?.dementia_stage || 'N/A',
+        conditions: detailsData?.conditions || '',
       });
       setHasPatient(true);
     } catch (err) {
@@ -228,121 +276,130 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     persist(key, next);
   };
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: isDark ? '#0f0f23' : C.bgTo }} />;
+
+  const dynamicStyles = {
+    root: { ...styles.root, backgroundColor: isDark ? '#0f0f23' : C.bgTo },
+    headerTitle: { ...styles.headerTitle, color: isDark ? '#e5e7eb' : C.slate800 },
+    card: { backgroundColor: isDark ? '#1a1a2e' : C.white },
+    text: { color: isDark ? '#e5e7eb' : C.slate800 },
+    textSecondary: { color: isDark ? '#9ca3af' : C.slate500 },
+    sectionTitle: { ...styles.sectionTitle, color: isDark ? '#e5e7eb' : C.slate700 },
+  };
 
   return (
-    <View style={styles.root}>
+    <View style={dynamicStyles.root}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={C.slate600} />
+        <TouchableOpacity style={[styles.backBtn, dynamicStyles.card]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={isDark ? '#9ca3af' : C.slate600} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={dynamicStyles.headerTitle}>Settings</Text>
       </View>
 
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 24 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.profileCard} onTouchEnd={() => navigation.navigate('EditCaregiverProfile')}>
+        <View style={[styles.profileCard, dynamicStyles.card]} onTouchEnd={() => navigation.navigate('EditCaregiverProfile')}>
           <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>EC</Text>
+            <Text style={styles.profileAvatarText}>
+              {caregiver?.full_name
+                ? caregiver.full_name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'NA'}
+            </Text>
           </View>
           <View style={{ marginLeft: 14, flex: 1 }}>
-            <Text style={styles.profileName}>Emily Carter</Text>
-            <Text style={styles.profileEmail}>emily.carter@example.com</Text>
+            <Text style={[styles.profileName, dynamicStyles.text]}>{caregiver?.full_name || 'Loading...'}</Text>
+            <Text style={[styles.profileEmail, dynamicStyles.textSecondary]}>{caregiver?.email || ''}</Text>
           </View>
           <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
         </View>
 
-        <Text style={styles.sectionTitle}>Patient Profile</Text>
+        <Text style={dynamicStyles.sectionTitle}>Patient Profile</Text>
 
         {patientLoading ? (
-          <View style={[styles.rowCard, { justifyContent: 'center', alignItems: 'center', minHeight: 80 }]}>
+          <View style={[styles.rowCard, dynamicStyles.card, { justifyContent: 'center', alignItems: 'center', minHeight: 80 }]}>
             <ActivityIndicator size="large" color={C.indigo500} />
           </View>
         ) : hasPatient && patient ? (
-          <View style={styles.rowCard} onTouchEnd={() => navigation.navigate('PatientDetails')}>
+          <View style={[styles.rowCard, dynamicStyles.card]} onTouchEnd={() => navigation.navigate('PatientDetails')}>
             <View style={[styles.iconBg, { backgroundColor: C.indigo100 }]}>
               <MaterialIcons name="face" size={22} color={C.indigo500} />
             </View>
             <View style={{ marginLeft: 14, flex: 1 }}>
-              <Text style={styles.rowTitle}>{patient.full_name}</Text>
-              <Text style={styles.rowSub}>Stage {patient.dementia_stage}</Text>
+              <Text style={[styles.rowTitle, dynamicStyles.text]}>{patient.full_name}</Text>
+              <Text style={[styles.rowSub, dynamicStyles.textSecondary]}>
+                {patient.dementia_stage ? `Stage ${patient.dementia_stage}` : 'N/A'}
+                {patient.conditions ? ` • ${patient.conditions}` : ''}
+              </Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
           </View>
         ) : (
-          <TouchableOpacity activeOpacity={0.9} style={styles.addPatient} onPress={() => navigation.navigate('AddPatient')}>
+          <TouchableOpacity activeOpacity={0.9} style={[styles.addPatient, dynamicStyles.card]} onPress={() => navigation.navigate('AddPatient')}>
             <View style={[styles.iconBg, { backgroundColor: '#f1f5f9' }]}>
               <MaterialIcons name="add" size={22} color={C.slate500} />
             </View>
-            <Text style={styles.addPatientText}>Add New Patient</Text>
+            <Text style={[styles.addPatientText, dynamicStyles.text]}>Add New Patient</Text>
           </TouchableOpacity>
         )}
 
-        <Text style={styles.sectionTitle}>Account Management</Text>
+        <Text style={dynamicStyles.sectionTitle}>Account Management</Text>
 
-        <View style={styles.groupCard}>
+        <View style={[styles.groupCard, dynamicStyles.card]}>
           <TouchableOpacity activeOpacity={0.8} style={styles.groupRow} onPress={() => navigation.navigate('ChangeEmail')}>
             <View style={[styles.iconBg, { backgroundColor: C.purple100 }]}>
               <MaterialIcons name="mail" size={20} color={C.purple500} />
             </View>
-            <Text style={styles.groupText}>Change Email ID</Text>
-            <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
+            <Text style={[styles.groupText, dynamicStyles.text]}>Change Email ID</Text>
+            <MaterialIcons name="chevron-right" size={22} color={isDark ? '#6b7280' : C.slate400} />
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: isDark ? '#374151' : '#eef2f7' }]} />
 
           <TouchableOpacity activeOpacity={0.8} style={styles.groupRow} onPress={() => navigation.navigate('ChangePassword')}>
-            <View style={[styles.iconBg, { backgroundColor: C.purple100 }]}>
-              <MaterialIcons name="lock" size={20} color={C.purple500} />
+            <View style={[styles.iconBg, { backgroundColor: isDark ? '#2d2d44' : C.purple100 }]}>
+              <MaterialIcons name="lock" size={20} color={isDark ? '#9333ea' : C.purple500} />
             </View>
-            <Text style={styles.groupText}>Change Password</Text>
+            <Text style={[styles.groupText, dynamicStyles.text]}>Change Password</Text>
             <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Text style={dynamicStyles.sectionTitle}>Preferences</Text>
 
-        <View style={styles.groupCard}>
+        <View style={[styles.groupCard, dynamicStyles.card]}>
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
               <View style={[styles.iconBg, { backgroundColor: C.blue100 }]}>
                 <MaterialIcons name="notifications" size={20} color={C.blue500} />
               </View>
-              <Text style={styles.groupText}>Push Notifications</Text>
+              <Text style={[styles.groupText, dynamicStyles.text]}>Push Notifications</Text>
             </View>
             <Toggle value={pushNotifications} onChange={(v) => togglePref('pushNotifications', !v, setPushNotifications)} />
           </View>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: isDark ? '#374151' : '#eef2f7' }]} />
 
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
-              <View style={[styles.iconBg, { backgroundColor: C.blue100 }]}>
-                <MaterialIcons name="sms" size={20} color={C.blue500} />
+              <View style={[styles.iconBg, { backgroundColor: isDark ? '#2d2d44' : C.blue100 }]}>
+                <MaterialIcons name="dark-mode" size={20} color={isDark ? '#9333ea' : C.blue500} />
               </View>
-              <Text style={styles.groupText}>SMS Alerts</Text>
-            </View>
-            <Toggle value={smsAlerts} onChange={(v) => togglePref('smsAlerts', !v, setSmsAlerts)} />
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.prefRow}>
-            <View style={styles.prefLeft}>
-              <View style={[styles.iconBg, { backgroundColor: C.blue100 }]}>
-                <MaterialIcons name="dark-mode" size={20} color={C.blue500} />
-              </View>
-              <Text style={styles.groupText}>Dark Mode</Text>
+              <Text style={[styles.groupText, dynamicStyles.text]}>Dark Mode</Text>
             </View>
             <Toggle value={isDark} onChange={() => toggleTheme()} />
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>API Configuration</Text>
+        <Text style={dynamicStyles.sectionTitle}>API Configuration</Text>
 
-        <View style={styles.groupCard}>
+        <View style={[styles.groupCard, dynamicStyles.card]}>
           <TouchableOpacity 
             activeOpacity={0.8} 
             style={styles.groupRow} 
@@ -351,13 +408,13 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.iconBg, { backgroundColor: '#dcfce7' }]}>
               <MaterialIcons name="cloud" size={20} color="#22c55e" />
             </View>
-            <Text style={styles.groupText}>Ngrok URL Settings</Text>
+            <Text style={[styles.groupText, dynamicStyles.text]}>Ngrok URL Settings</Text>
             <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={styles.logoutBtn}
+          style={[styles.logoutBtn, dynamicStyles.card]}
           activeOpacity={0.85}
           onPress={async () => {
             try {

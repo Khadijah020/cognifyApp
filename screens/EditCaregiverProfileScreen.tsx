@@ -1,10 +1,10 @@
 // EditCaregiverProfileScreen.tsx
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -12,24 +12,26 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditCaregiverProfile'>;
 
 export default function EditCaregiverProfileScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -151,14 +153,26 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
     );
   }
 
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
-    <View style={S.container}>
+    <View style={[S.container, { backgroundColor: isDark ? '#0f0f1a' : '#f0f4ff' }]}>
       {/* Header */}
       <View style={S.header}>
-        <TouchableOpacity style={S.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#0f172a" />
+        <TouchableOpacity style={[S.backBtn, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={isDark ? '#9ca3af' : '#0f172a'} />
         </TouchableOpacity>
-        <Text style={S.headerTitle}>Edit Profile</Text>
+        <Text style={[S.headerTitle, { color: isDark ? '#e5e7eb' : '#0f172a' }]}>Edit Profile</Text>
+        <View style={[S.avatarCircle, { backgroundColor: isDark ? '#7c3aed' : '#6366f1' }]}>
+          <Text style={S.avatarInitials}>{getInitials(fullName || 'CG')}</Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -282,7 +296,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     fontSize: 22,
     color: '#0f172a',
-    marginLeft: 37,
+    flex: 1,
+    textAlign: 'center',
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  avatarInitials: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 16,
+    color: '#ffffff',
   },
   avatarWrap: {
     width: 112,

@@ -104,8 +104,19 @@ class ReminderService {
       if (period.toUpperCase() === 'PM' && hour !== 12) hour += 12;
       if (period.toUpperCase() === 'AM' && hour === 12) hour = 0;
 
-      const reminderDate = new Date(reminder.date);
-      reminderDate.setHours(hour, minutes, 0);
+      // Parse date as LOCAL time, not UTC
+      let year: number, month: number, day: number;
+      const dateStr = reminder.date;
+      
+      if (dateStr.includes('T')) {
+        const datePart = dateStr.split('T')[0];
+        [year, month, day] = datePart.split('-').map(Number);
+      } else {
+        [year, month, day] = dateStr.split('-').map(Number);
+      }
+      
+      // Create date with LOCAL timezone (month is 0-indexed)
+      const reminderDate = new Date(year, month - 1, day, hour, minutes, 0, 0);
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
@@ -187,6 +198,42 @@ class ReminderService {
       return { ...data, notificationId };
     } catch (error: any) {
       console.error('❌ Failed to save reminder:', error.message);
+      throw error;
+    }
+  }
+
+  // ✅ Update existing reminder
+  async updateReminder(reminderId: string, reminderData: Partial<Omit<Reminder, 'id' | 'caregiver_id' | 'patient_id'>>) {
+    try {
+      console.log('🔄 Updating reminder:', reminderId);
+
+      const updateData: any = {};
+      
+      if (reminderData.title !== undefined) updateData.title = reminderData.title;
+      if (reminderData.type !== undefined) updateData.type = reminderData.type;
+      if (reminderData.date !== undefined) updateData.date = reminderData.date;
+      if (reminderData.time !== undefined) updateData.time = reminderData.time;
+      if (reminderData.status !== undefined) updateData.status = reminderData.status;
+      if (reminderData.medication !== undefined) updateData.medication = reminderData.medication;
+      if (reminderData.instructions !== undefined) updateData.instructions = reminderData.instructions;
+      if (reminderData.caregiver_note !== undefined) updateData.caregiver_note = reminderData.caregiver_note;
+
+      const { data, error } = await supabase
+        .from('reminders')
+        .update(updateData)
+        .eq('id', reminderId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Database error updating reminder:', error.message);
+        throw error;
+      }
+
+      console.log('✅ Reminder updated successfully!');
+      return data;
+    } catch (error: any) {
+      console.error('❌ Failed to update reminder:', error.message);
       throw error;
     }
   }
