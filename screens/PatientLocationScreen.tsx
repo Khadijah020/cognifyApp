@@ -53,10 +53,33 @@ const C = {
   btnTo: '#6366f1',
 };
 
+function getTimeAgo(date: Date): string {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
 export default function PatientLocationScreen({ navigation, route }: Props) {
   const { colors, isDark } = useTheme();
-  const [patientName, setPatientName] = useState<string>('Loading...');
-  const [lastLocationUpdate, setLastLocationUpdate] = useState<Date>(new Date());
+  const alertLatitude = route.params?.latitude;
+  const alertLongitude = route.params?.longitude;
+  const alertCoordinates = useMemo(
+    () =>
+      typeof alertLatitude === 'number' && typeof alertLongitude === 'number'
+        ? { latitude: alertLatitude, longitude: alertLongitude }
+        : null,
+    [alertLatitude, alertLongitude]
+  );
+  const hasAlertLocation = !!alertCoordinates;
+  const fromAlert = route.params?.fromAlert === true;
+  const routePatientName = route.params?.patientName;
+  const initialTimestamp = useRef(route.params?.timestamp ? new Date(route.params.timestamp) : new Date()).current;
+  const [lastLocationUpdate, setLastLocationUpdate] = useState<Date>(initialTimestamp);
   
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -66,10 +89,17 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
   });
 
   const [patientInfo, setPatientInfo] = useState<PatientInfo>({
-    name: 'Loading...',
-    lastUpdated: 'just now',
-    address: 'Loading address...',
-    coordinates: { latitude: 0, longitude: 0 },
+    name: routePatientName || 'Loading...',
+    lastUpdated: route.params?.timestamp ? getTimeAgo(initialTimestamp) : 'just now',
+    address: hasAlertLocation
+      ? 'Resolving fall alert location...'
+      : fromAlert
+        ? 'This fall alert did not include GPS coordinates.'
+        : 'Loading address...',
+    coordinates: {
+      latitude: alertCoordinates?.latitude ?? 0,
+      longitude: alertCoordinates?.longitude ?? 0,
+    },
   });
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
   const [mapRegion, setMapRegion] = useState<Region | null>(null);
@@ -77,18 +107,6 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
 
   const screenH = Dimensions.get('window').height;
   const mapHeight = useMemo(() => Math.max(350, screenH - 380), [screenH]);
-
-  // Helper function to calculate time ago
-  const getTimeAgo = (date: Date): string => {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    const days = Math.floor(hours / 24);
-    return `${days} day${days > 1 ? 's' : ''} ago`;
-  };
 
   // Update time ago every 30 seconds
   useEffect(() => {
@@ -102,15 +120,16 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
     return () => clearInterval(interval);
   }, [lastLocationUpdate]);
 
-  // Fetch patient name from Supabase on mount
+  // Fetch patient name from Supabase on mount when one was not passed in route params.
   useEffect(() => {
+    if (routePatientName) return;
+
     const fetchPatientName = async () => {
       try {
         const id = await CaregiverService.getCurrentCaregiversId();
         if (id) {
           const patient = await CaregiverService.getPrimaryPatient(id);
           if (patient) {
-            setPatientName(patient.full_name || 'Patient');
             setPatientInfo((prev) => ({
               ...prev,
               name: patient.full_name || 'Patient',
@@ -122,12 +141,52 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
       }
     };
     fetchPatientName();
-  }, []);
+  }, [routePatientName]);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
 
     (async () => {
+      if (alertCoordinates) {
+        const coordinates = alertCoordinates;
+        const region = {
+          ...coordinates,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+
+        let formattedAddress = 'Fall alert location';
+        try {
+          const [addr] = await Location.reverseGeocodeAsync(coordinates);
+          formattedAddress = addr
+            ? `${addr.street || 'Near'} ${addr.name || ''}, ${addr.city || ''}, ${addr.region || ''}`.replace(/\s+/g, ' ').trim()
+            : formattedAddress;
+        } catch (e) {
+          console.log('Reverse geocode error', e);
+        }
+
+        setPatientInfo((prev) => ({
+          ...prev,
+          name: routePatientName || prev.name,
+          lastUpdated: route.params?.timestamp ? getTimeAgo(initialTimestamp) : 'just now',
+          address: formattedAddress,
+          coordinates,
+        }));
+        setMapRegion(region);
+        return;
+      }
+
+      if (fromAlert) {
+        setPatientInfo((prev) => ({
+          ...prev,
+          name: routePatientName || prev.name,
+          lastUpdated: route.params?.timestamp ? getTimeAgo(initialTimestamp) : 'just now',
+          address: 'This fall alert did not include GPS coordinates.',
+        }));
+        setMapRegion(null);
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status === 'granted');
       if (status !== 'granted') {
@@ -183,7 +242,7 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
     })();
 
     return () => sub?.remove();
-  }, []);
+  }, [alertCoordinates, fromAlert, initialTimestamp, route.params?.timestamp, routePatientName]);
 
   const openExternalDirections = () => {
     const { latitude, longitude } = patientInfo.coordinates;
@@ -235,7 +294,7 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
                 style={StyleSheet.absoluteFill}
                 initialRegion={mapRegion}
                 region={mapRegion}
-                showsUserLocation
+                showsUserLocation={!hasAlertLocation}
                 showsMyLocationButton={false}
             >
                 {/* Gradient pin with avatar + white halo */}
@@ -265,15 +324,32 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
             </MapView>
             ) : (
             <View style={[StyleSheet.absoluteFill, styles.loadingMap]}>
-                <Text style={{ fontFamily: 'Poppins_500Medium', color: C.slate600 }}>Loading map…</Text>
+                <Text style={{ fontFamily: 'Poppins_500Medium', color: C.slate600 }}>
+                  {fromAlert ? 'No alert coordinates available' : 'Loading map...'}
+                </Text>
             </View>
             )}
 
             {/* Map control stack (locate / zoom in / out) */}
             <View style={styles.controlsWrap}>
             <ControlButton
-                icon={<MaterialIcons name="my-location" size={18} color={C.slate700} />}
+                icon={<MaterialIcons name={hasAlertLocation ? "center-focus-strong" : "my-location"} size={18} color={C.slate700} />}
                 onPress={async () => {
+                if (alertCoordinates) {
+                    const region = {
+                    latitude: alertCoordinates.latitude,
+                    longitude: alertCoordinates.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                    };
+                    setMapRegion(region);
+                    mapRef.current?.animateToRegion(region, 300);
+                    return;
+                }
+                if (fromAlert) {
+                    Alert.alert('Location unavailable', 'This fall alert did not include GPS coordinates.');
+                    return;
+                }
                 if (!locationPermission) {
                     Alert.alert('Permission Denied', 'Location permission is required.');
                     return;

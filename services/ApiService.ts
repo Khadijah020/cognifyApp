@@ -1,11 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Default ngrok URL - can be overridden by user in settings
-const DEFAULT_NGROK_URL = 'https://a740dc4389a4.ngrok-free.app';
+// Backend notebook ngrok URL - can be overridden by user in settings.
+// The backend notebook itself calls the vision notebook through VISION_SERVICE_URL.
+const DEFAULT_NGROK_URL = 'https://e0ee-136-117-84-242.ngrok-free.app';
 const NGROK_URL_STORAGE_KEY = 'cognify_ngrok_url';
+const STALE_NGROK_URLS = new Set([
+  'https://a740dc4389a4.ngrok-free.app',
+  'https://3ec9-34-125-182-35.ngrok-free.app',
+]);
 
 // In-memory cache for the URL (to avoid async calls every time)
 let cachedNgrokUrl: string | null = null;
+
+const resolveNgrokUrl = (storedUrl: string | null): string => {
+  if (!storedUrl || STALE_NGROK_URLS.has(storedUrl)) {
+    return DEFAULT_NGROK_URL;
+  }
+
+  return storedUrl;
+};
 
 export class ApiService {
   /**
@@ -14,7 +27,10 @@ export class ApiService {
   static async initialize(): Promise<void> {
     try {
       const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
-      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      cachedNgrokUrl = resolveNgrokUrl(storedUrl);
+      if (storedUrl && storedUrl !== cachedNgrokUrl) {
+        await AsyncStorage.setItem(NGROK_URL_STORAGE_KEY, cachedNgrokUrl);
+      }
       console.log('📡 ApiService initialized with URL:', cachedNgrokUrl);
     } catch (error) {
       console.error('Error initializing ApiService:', error);
@@ -48,7 +64,10 @@ export class ApiService {
   static async getNgrokUrlAsync(): Promise<string> {
     try {
       const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
-      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      cachedNgrokUrl = resolveNgrokUrl(storedUrl);
+      if (storedUrl && storedUrl !== cachedNgrokUrl) {
+        await AsyncStorage.setItem(NGROK_URL_STORAGE_KEY, cachedNgrokUrl);
+      }
       return cachedNgrokUrl;
     } catch (error) {
       console.error('Error getting ngrok URL:', error);
@@ -62,7 +81,10 @@ export class ApiService {
   static async refreshCache(): Promise<void> {
     try {
       const storedUrl = await AsyncStorage.getItem(NGROK_URL_STORAGE_KEY);
-      cachedNgrokUrl = storedUrl || DEFAULT_NGROK_URL;
+      cachedNgrokUrl = resolveNgrokUrl(storedUrl);
+      if (storedUrl && storedUrl !== cachedNgrokUrl) {
+        await AsyncStorage.setItem(NGROK_URL_STORAGE_KEY, cachedNgrokUrl);
+      }
       console.log('🔄 ApiService cache refreshed:', cachedNgrokUrl);
     } catch (error) {
       console.error('Error refreshing cache:', error);
@@ -226,6 +248,100 @@ export class ApiService {
     } catch (error) {
       console.error('❌ Error polling step updates:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Poll backend-queued fall detections produced by video analysis.
+   * Backend notebook endpoint: GET /get_fall_detections
+   * Response shape: { status, count, fall_detections: [...] }
+   */
+  static async getBackendFallAlerts(caregiverId?: string, patientId?: string): Promise<{ alerts: any[] }> {
+    try {
+      const endpoint = this.getApiEndpoint('/get_fall_detections');
+      const response = await fetch(endpoint, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+
+      if (response.status === 404) {
+        return { alerts: [] };
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const fallDetections = result.fall_detections || result.alerts || result.fall_alerts || [];
+      const matchingFalls = fallDetections
+        .filter((item: any) => {
+          if (item?.is_fall !== true) return false;
+          if (
+            caregiverId &&
+            item.caregiver_id &&
+            item.caregiver_id !== caregiverId &&
+            item.caregiver_id !== 'caregiver123'
+          ) {
+            return false;
+          }
+          if (
+            patientId &&
+            item.patient_id &&
+            item.patient_id !== patientId &&
+            item.patient_id !== 'user123'
+          ) {
+            return false;
+          }
+          return true;
+        })
+        .map((item: any) => ({
+          ...item,
+          patient_id: item.patient_id === 'user123' ? patientId : item.patient_id,
+          caregiver_id: item.caregiver_id === 'caregiver123' ? caregiverId : item.caregiver_id,
+          status: item.status || 'active',
+          source: item.source || 'video',
+          created_at: item.created_at || item.timestamp || new Date().toISOString(),
+        }));
+
+      return {
+        alerts: matchingFalls,
+      };
+    } catch (error) {
+      console.error('Error polling backend fall alerts:', error);
+      return { alerts: [] };
+    }
+  }
+
+  /**
+   * Send a sensor fall candidate to the backend fusion cache.
+   * This does not write to Supabase; it is safe to ignore when backend support is absent.
+   */
+  static async submitSensorFallCandidate(candidate: {
+    patient_id: string;
+    caregiver_id: string;
+    sensor_score: number;
+    latitude?: number | null;
+    longitude?: number | null;
+  }): Promise<void> {
+    try {
+      const endpoint = this.getApiEndpoint('/fall_sensor_candidate');
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: this.getHeaders('application/json'),
+        body: JSON.stringify(candidate),
+      });
+
+      if (response.status === 404) {
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    } catch (error) {
+      console.log('Sensor fall candidate was not sent to backend:', error);
     }
   }
 

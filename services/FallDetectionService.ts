@@ -1,6 +1,7 @@
 import { Accelerometer } from "expo-sensors";
 import { Alert, Vibration } from "react-native";
 import * as Location from "expo-location";
+import { ApiService } from "./ApiService";
 import { supabase } from "../src/lib/supabase";
 
 class FallDetectionService {
@@ -125,6 +126,14 @@ class FallDetectionService {
         status: "active",
         created_at: new Date().toISOString(),
       };
+
+      await ApiService.submitSensorFallCandidate({
+        patient_id: patientId,
+        caregiver_id: caregiverId,
+        sensor_score: 0.92,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      });
 
       const { error } = await supabase.from("fall_alerts").insert([alert]);
       if (error) console.error("❌ Error saving fall alert:", error);

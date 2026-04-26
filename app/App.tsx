@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinkingOptions, NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
@@ -33,7 +34,14 @@ export type RootStackParamList = {
   CaregiverDashboard: undefined;
   PatientDetails: undefined;
   EditPatientDetails: undefined;
-  PatientLocation: { patientName?: string } | undefined;
+  PatientLocation: {
+    patientName?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    timestamp?: string;
+    source?: string;
+    fromAlert?: boolean;
+  } | undefined;
   Settings: undefined;
   ManageFaces: undefined;
   ChangeEmail: undefined;
@@ -72,6 +80,16 @@ const linking: LinkingOptions<RootStackParamList> = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);

@@ -13,6 +13,7 @@ import AppLoading from "expo-app-loading";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -41,6 +42,7 @@ import Svg, {
 } from "react-native-svg";
 import { RootStackParamList } from "../app/App";
 import { useTheme } from "../contexts/ThemeContext";
+import { ApiService } from "../services/ApiService";
 import * as CaregiverService from "../services/CaregiverService";
 import CognitionLevelService, { CognitionScore } from "../services/CognitionLevelService";
 import FallAlertListener from "../services/FallAlertListener";
@@ -53,6 +55,57 @@ import { supabase } from "../src/lib/supabase";
 type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
 const W = Dimensions.get("window").width;
+const FALL_ALERT_COOLDOWN_MS = 2 * 60 * 1000;
+
+type FallAlertData = {
+  id?: string;
+  patient_id?: string;
+  caregiver_id?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  status?: string;
+  created_at?: string;
+  patient_name?: string;
+  source?: string;
+  confidence?: number;
+  fall_probability?: number;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const stringValue = (value: unknown) => (typeof value === "string" ? value : undefined);
+const numberValue = (value: unknown) => (typeof value === "number" ? value : undefined);
+
+const fallAlertFromNotificationData = (data: Record<string, unknown>): FallAlertData | null => {
+  const nestedAlert = isRecord(data.fall_alert)
+    ? data.fall_alert
+    : isRecord(data.fallAlert)
+      ? data.fallAlert
+      : data;
+
+  const isFallAlert =
+    data.type === "fall_alert" ||
+    nestedAlert.type === "fall_alert" ||
+    typeof nestedAlert.patient_id === "string" ||
+    typeof nestedAlert.caregiver_id === "string";
+
+  if (!isFallAlert) return null;
+
+  return {
+    id: stringValue(nestedAlert.id),
+    patient_id: stringValue(nestedAlert.patient_id),
+    caregiver_id: stringValue(nestedAlert.caregiver_id),
+    latitude: numberValue(nestedAlert.latitude) ?? null,
+    longitude: numberValue(nestedAlert.longitude) ?? null,
+    status: stringValue(nestedAlert.status),
+    created_at: stringValue(nestedAlert.created_at),
+    patient_name: stringValue(nestedAlert.patient_name),
+    source: stringValue(nestedAlert.source),
+    confidence: numberValue(nestedAlert.confidence),
+    fall_probability: numberValue(nestedAlert.fall_probability),
+  };
+};
 
 type ReminderData = {
   title: string;
@@ -91,7 +144,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [patientName, setPatientName] = useState<string>("Loading...");
   const [caregiverName, setCaregiverName] = useState<string>("Caregiver");
   const [patientPhone, setPatientPhone] = useState<string | null>(null);
-  const [alert, setAlert] = useState<any>(null);
+  const [alert, setAlert] = useState<FallAlertData | null>(null);
+  const shownFallAlertsRef = useRef<Map<string, number>>(new Map());
   
   /* -------------------- Modal state -------------------- */
   const [showReminder, setShowReminder] = useState(false);
@@ -176,6 +230,80 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     initializeCaregiver();
   }, []);
 
+  const shouldShowFallAlert = (incomingAlert: FallAlertData) => {
+    const now = Date.now();
+    const shown = shownFallAlertsRef.current;
+
+    for (const [key, timestamp] of shown.entries()) {
+      if (now - timestamp > FALL_ALERT_COOLDOWN_MS) {
+        shown.delete(key);
+      }
+    }
+
+    const alertKey = incomingAlert.id
+      ? `alert:${incomingAlert.id}`
+      : `alert:${incomingAlert.patient_id || patientId || 'unknown'}:${incomingAlert.created_at || ''}:${incomingAlert.source || 'unknown'}`;
+    if (shown.has(alertKey)) {
+      return false;
+    }
+
+    shown.set(alertKey, now);
+    return true;
+  };
+
+  const handleIncomingFallAlert = (incomingAlert: FallAlertData) => {
+    const normalizedAlert: FallAlertData = {
+      ...incomingAlert,
+      patient_id: incomingAlert.patient_id || patientId || undefined,
+      caregiver_id: incomingAlert.caregiver_id || caregiverId || undefined,
+      patient_name: incomingAlert.patient_name || patientName,
+      status: incomingAlert.status || 'active',
+      created_at: incomingAlert.created_at || new Date().toISOString(),
+    };
+
+    if (!shouldShowFallAlert(normalizedAlert)) {
+      console.log('Skipping duplicate fall alert:', normalizedAlert);
+      return;
+    }
+
+    setAlert(normalizedAlert);
+    if (patientId) loadRecentActivities();
+  };
+
+  useEffect(() => {
+    if (!caregiverId) return;
+
+    const handleNotificationData = (data: Record<string, unknown>) => {
+      const notificationAlert = fallAlertFromNotificationData(data);
+      if (!notificationAlert) return false;
+
+      if (notificationAlert.caregiver_id && notificationAlert.caregiver_id !== caregiverId) {
+        return false;
+      }
+
+      handleIncomingFallAlert(notificationAlert);
+      return true;
+    };
+
+    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+      handleNotificationData(notification.request.content.data);
+    });
+
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationData(response.notification.request.content.data);
+    });
+
+    const lastResponse = Notifications.getLastNotificationResponse();
+    if (lastResponse && handleNotificationData(lastResponse.notification.request.content.data)) {
+      Notifications.clearLastNotificationResponse();
+    }
+
+    return () => {
+      receivedSubscription.remove();
+      responseSubscription.remove();
+    };
+  }, [caregiverId, patientId, patientName]);
+
   // ✅ Start fall alert listener when caregiver ID is available
   useEffect(() => {
     if (!caregiverId) return;
@@ -183,13 +311,38 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     console.log('👂 Starting fall alert listener for caregiver:', caregiverId);
     FallAlertListener.startListening(caregiverId, (newAlert: any) => {
       console.log("📩 Fall alert received:", newAlert);
-      setAlert(newAlert);
-      // Refresh activities when fall is detected
-      if (patientId) loadRecentActivities();
+      handleIncomingFallAlert(newAlert);
     });
 
     return () => FallAlertListener.stopListening();
-  }, [caregiverId, patientId]);
+  }, [caregiverId, patientId, patientName]);
+
+  // Poll backend video-fall queue. Supabase realtime still handles sensor alerts.
+  useEffect(() => {
+    if (!caregiverId) return;
+
+    let cancelled = false;
+
+    const pollBackendFallAlerts = async () => {
+      const response = await ApiService.getBackendFallAlerts(caregiverId, patientId || undefined);
+      if (cancelled) return;
+
+      for (const backendAlert of response.alerts) {
+        handleIncomingFallAlert({
+          ...backendAlert,
+          source: backendAlert.source || 'video',
+        });
+      }
+    };
+
+    pollBackendFallAlerts();
+    const interval = setInterval(pollBackendFallAlerts, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [caregiverId, patientId, patientName]);
 
   // ✅ Load medication adherence when patient ID is available
   useEffect(() => {
@@ -524,7 +677,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
 
   if (!fontsLoaded) return <AppLoading />;
 
-  const gradientColors = isDark ? ['#0f0f23', '#1a1a2e'] : ['#e0e7ff', '#f0f4ff'];
+  const gradientColors: [string, string] = isDark ? ['#0f0f23', '#1a1a2e'] : ['#e0e7ff', '#f0f4ff'];
 
   if (!caregiverId) {
     return (
@@ -890,7 +1043,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                       style={styles.puprimaryButton}
                       onPress={() => {
                         setAlert(null);
-                        navigation.navigate("PatientLocation", { patientName });
+                        navigation.navigate("PatientLocation", {
+                          patientName: alert?.patient_name || patientName,
+                          latitude: alert?.latitude ?? undefined,
+                          longitude: alert?.longitude ?? undefined,
+                          timestamp: alert?.created_at,
+                          source: alert?.source,
+                          fromAlert: true,
+                        });
                       }}
                     >
                       <MaterialIcons name="location-on" size={22} color="#e11d48" />
@@ -1141,7 +1301,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                   {/* Disclaimer Text */}
                   <Text style={disclaimerModalStyles.disclaimerText}>
                     The following cognition assessment is <Text style={{ fontFamily: 'Poppins_600SemiBold' }}>not a medical diagnosis</Text>. 
-                    It is a general evaluation based on the patient's activity records, medication adherence, and safety incidents.
+                    It is a general evaluation based on the patient{"'"}s activity records, medication adherence, and safety incidents.
                   </Text>
                   
                   {/* Additional Info */}
