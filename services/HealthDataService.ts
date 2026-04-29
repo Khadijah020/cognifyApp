@@ -1,12 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pedometer } from 'expo-sensors';
-import { Platform } from 'react-native';
+import { supabase } from '../src/lib/supabase';
 
 const MOCK_HEALTH_DATA_KEY = '@cognify_mock_health_data';
 const REAL_STEPS_CACHE_KEY = '@cognify_real_steps_cache';
 
 // Platform-specific health data source types
 type HealthDataSource = 'apple_healthkit' | 'google_fit' | 'pedometer' | 'mock';
+
+export type DailyHealthData = {
+  steps: number;
+  activeMinutes: number;
+  date: string;
+  recordedAt?: string;
+};
 
 class HealthDataService {
   private pedometerAvailable = false;
@@ -162,57 +169,24 @@ class HealthDataService {
       } else if (this.pedometerAvailable) {
         return await this.getPedometerStepCount();
       } else {
-        console.log('📱 No health APIs available, using mock data');
-        return await this.getMockStepCount();
+        console.log('Pedometer not available, using cached data');
+        return (await this.getCachedRealStepCount()) ?? 0;
       }
     } catch (error) {
       console.log('Error getting steps from device APIs:', error);
-      return await this.getMockStepCount();
+      return (await this.getCachedRealStepCount()) ?? 0;
     }
   }
 
-  /**
-   * Get step count on iOS using CoreMotion/HealthKit
-   */
-  private async getIOSStepCount(): Promise<number> {
-    try {
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // On iOS, Pedometer uses CoreMotion which integrates with HealthKit
-      // This gives us accurate step data from Apple Health
-      const result = await Pedometer.getStepCountAsync(startOfDay, today);
-      console.log('📱 iOS HealthKit/CoreMotion step count:', result.steps);
-      
-      await this.saveRealStepCount(result.steps);
-      return result.steps || 0;
-    } catch (error) {
-      console.log('Error getting iOS steps:', error);
-      const cachedSteps = await this.getCachedRealStepCount();
-      return cachedSteps || this.generateMockSteps();
-    }
-  }
+  async getTodayHealthData(): Promise<DailyHealthData> {
+    const steps = await this.getStepCount();
 
-  /**
-   * Get step count on Android using step sensor/Google Fit
-   */
-  private async getAndroidStepCount(): Promise<number> {
-    try {
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // On Android, Pedometer uses the hardware step counter sensor
-      // For full Google Fit integration, react-native-google-fit would be needed
-      const result = await Pedometer.getStepCountAsync(startOfDay, today);
-      console.log('📱 Android step sensor count:', result.steps);
-      
-      await this.saveRealStepCount(result.steps);
-      return result.steps || 0;
-    } catch (error) {
-      console.log('Error getting Android steps:', error);
-      const cachedSteps = await this.getCachedRealStepCount();
-      return cachedSteps || this.generateMockSteps();
-    }
+    return {
+      steps,
+      activeMinutes: this.estimateActiveMinutes(steps),
+      date: this.getLocalDateKey(),
+      recordedAt: new Date().toISOString(),
+    };
   }
 
   private async getPedometerStepCount(): Promise<number> {
@@ -232,27 +206,19 @@ class HealthDataService {
       console.log('Error getting steps from Pedometer, trying cached data:', error);
       // Try to get last cached real step count
       const cachedSteps = await this.getCachedRealStepCount();
-      return cachedSteps || this.generateMockSteps();
+      return cachedSteps ?? 0;
     }
   }
 
   async getActiveMinutes(): Promise<number> {
     try {
-      await this.initialize();
-      
-      // Get steps first using platform-specific method
       const steps = await this.getStepCount();
-      
-      // Estimate active minutes based on steps (approximately 100 steps per minute of walking)
-      const estimatedMinutes = Math.max(0, Math.min(180, Math.round(steps / 100)));
-      
-      const sourceInfo = this.getDataSource();
-      console.log(`📱 ${sourceInfo.platform} - Estimated active minutes from ${steps} steps: ${estimatedMinutes}`);
-      
+      const estimatedMinutes = this.estimateActiveMinutes(steps);
+      console.log('Estimated active minutes from steps:', estimatedMinutes);
       return estimatedMinutes;
     } catch (error) {
       console.log('Error getting active minutes:', error);
-      return await this.getMockActiveMinutes();
+      return 0;
     }
   }
 
@@ -292,15 +258,95 @@ class HealthDataService {
     return Math.floor(30 + Math.random() * 90);
   }
 
-  async isHealthDataAvailable(): Promise<{ 
-    steps: boolean; 
-    activeMinutes: boolean; 
-    source: HealthDataSource;
-    platform: string;
-  }> {
-    await this.initialize();
-    
-    const hasHealthData = this.pedometerAvailable || this.healthKitAvailable || this.googleFitAvailable;
+  private estimateActiveMinutes(steps: number): number {
+    if (steps <= 0) return 0;
+    return Math.max(1, Math.min(120, Math.round(steps / 100)));
+  }
+
+  private getLocalDateKey(date = new Date()): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  async syncPatientDailyHealthData(patientId: string, healthData: DailyHealthData): Promise<void> {
+    try {
+      const { data: existing, error: selectError } = await supabase
+        .from('activity_metrics')
+        .select('id')
+        .eq('patient_id', patientId)
+        .eq('day', healthData.date)
+        .order('inserted_at', { ascending: false })
+        .limit(1);
+
+      if (selectError) {
+        console.warn('Unable to check existing patient activity metrics:', selectError.message);
+        return;
+      }
+
+      const payload = {
+        patient_id: patientId,
+        day: healthData.date,
+        steps: healthData.steps,
+        active_minutes: healthData.activeMinutes,
+        inserted_at: healthData.recordedAt || new Date().toISOString(),
+      };
+
+      if (existing?.[0]?.id) {
+        const { error } = await supabase
+          .from('activity_metrics')
+          .update(payload)
+          .eq('id', existing[0].id);
+
+        if (error) {
+          console.warn('Unable to update patient activity metrics:', error.message);
+        }
+        return;
+      }
+
+      const { error } = await supabase.from('activity_metrics').insert(payload);
+      if (error) {
+        console.warn('Unable to insert patient activity metrics:', error.message);
+      }
+    } catch (error) {
+      console.warn('Unexpected error syncing patient health data:', error);
+    }
+  }
+
+  async getPatientDailyHealthData(patientId: string): Promise<DailyHealthData | null> {
+    try {
+      const today = this.getLocalDateKey();
+      const { data, error } = await supabase
+        .from('activity_metrics')
+        .select('steps, active_minutes, day, inserted_at')
+        .eq('patient_id', patientId)
+        .eq('day', today)
+        .order('inserted_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.warn('Unable to load patient health data:', error.message);
+        return null;
+      }
+
+      const row = data?.[0];
+      if (!row) return null;
+
+      return {
+        steps: Number(row.steps) || 0,
+        activeMinutes: Number(row.active_minutes) || 0,
+        date: String(row.day),
+        recordedAt: row.inserted_at || undefined,
+      };
+    } catch (error) {
+      console.warn('Unexpected error loading patient health data:', error);
+      return null;
+    }
+  }
+
+  async isHealthDataAvailable(): Promise<{ steps: boolean; activeMinutes: boolean }> {
+    await this.checkPedometerAvailability();
     
     return {
       steps: hasHealthData,

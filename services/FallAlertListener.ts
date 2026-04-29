@@ -51,8 +51,13 @@ class FallAlertListener {
               console.error("❌ Error fetching patient name:", err);
             }
 
-            await this.sendNotification(alert);
-            onAlert(alert);
+            try {
+              onAlert(alert);
+            } catch (err) {
+              console.error("Error handling fall alert popup:", err);
+            }
+
+            void this.sendNotification(alert);
           }
         }
       )
@@ -88,7 +93,10 @@ class FallAlertListener {
           body: alert.patient_name 
             ? `${alert.patient_name} may have fallen.` 
             : "A patient may have fallen.",
-          data: alert,
+          data: {
+            ...alert,
+            type: "fall_alert",
+          },
         },
         trigger: null,
       });

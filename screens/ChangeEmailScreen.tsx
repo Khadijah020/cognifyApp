@@ -3,51 +3,35 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../src/lib/supabase';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ChangeEmail'>;
 
-const C = {
-  bgTop: '#e0e7ff',
-  bgBottom: '#f0f4ff',
-  card: '#ffffff',
-  text: '#0f172a',
-  slate700: '#334155',
-  slate600: '#475569',
-  slate500: '#64748b',
-  slate400: '#94a3b8',
-  inputBg: '#f8fafc',
-  inputBorder: '#e2e8f0',
-  disabledBg: '#e2e8f0',
-  disabledText: '#64748b',
-  gradFrom: '#8b5cf6',
-  gradTo: '#6366f1',
-  success: '#10b981',
-  shadow: '#000',
-};
-
 export default function ChangeEmailScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -55,7 +39,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
     Poppins_700Bold,
   });
 
-  const [currentEmail, setCurrentEmail] = useState('emily.carter@example.com');
+  const [currentEmail, setCurrentEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,6 +49,37 @@ export default function ChangeEmailScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const bannerOpacity = useState(new Animated.Value(0))[0];
   const bannerY = useState(new Animated.Value(-50))[0];
+
+  useEffect(() => {
+    const loadCaregiverEmail = async () => {
+      try {
+        // First try Supabase caregiver email
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (!authError && user) {
+          const { data, error } = await supabase
+            .from('caregivers')
+            .select('email')
+            .eq('id', user.id)
+            .single();
+
+          if (!error && data?.email) {
+            setCurrentEmail(data.email);
+            return;
+          }
+        }
+
+        // Fallback to locally cached email
+        const cached = await AsyncStorage.getItem('userEmail');
+        if (cached) {
+          setCurrentEmail(cached);
+        }
+      } catch (err) {
+        console.warn('Unable to load caregiver email:', err);
+      }
+    };
+
+    loadCaregiverEmail();
+  }, []);
 
   const validateEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -118,7 +133,9 @@ export default function ChangeEmailScreen({ navigation }: Props) {
     }
   };
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgBottom }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+
+  const s = createStyles(colors, isDark);
 
   return (
     <View style={s.root}>
@@ -138,7 +155,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
       {/* header */}
       <View style={s.header}>
         <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={C.slate600} />
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={s.title}>Change Email ID</Text>
       </View>
@@ -158,7 +175,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
             <TextInput
               value={currentEmail}
               editable={false}
-              style={[s.input, { backgroundColor: '#eef2f7', color: C.slate500 }]}
+              style={[s.input, s.disabledInput]}
             />
 
             {/* New email */}
@@ -166,7 +183,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
             <TextInput
               style={s.input}
               placeholder="Enter your new email"
-              placeholderTextColor={C.slate400}
+              placeholderTextColor={colors.placeholder}
               value={newEmail}
               onChangeText={setNewEmail}
               keyboardType="email-address"
@@ -179,7 +196,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
             <TextInput
               style={s.input}
               placeholder="Confirm your new email"
-              placeholderTextColor={C.slate400}
+              placeholderTextColor={colors.placeholder}
               value={confirmEmail}
               onChangeText={setConfirmEmail}
               keyboardType="email-address"
@@ -193,7 +210,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
               <TextInput
                 style={[s.input, { paddingRight: 44 }]}
                 placeholder="Enter your password"
-                placeholderTextColor={C.slate400}
+                placeholderTextColor={colors.placeholder}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={hidePw}
@@ -207,7 +224,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
                 <MaterialIcons
                   name={hidePw ? 'visibility-off' : 'visibility'}
                   size={22}
-                  color={C.slate400}
+                  color={colors.placeholder}
                 />
               </TouchableOpacity>
             </View>
@@ -220,7 +237,7 @@ export default function ChangeEmailScreen({ navigation }: Props) {
           <View style={{ paddingHorizontal: 24, marginTop: 28 }}>
             <TouchableOpacity activeOpacity={0.9} onPress={handleSave} disabled={loading}>
               <LinearGradient
-                colors={[C.gradFrom, C.gradTo]}
+                colors={isDark ? ['#7c3aed', '#6366f1'] : ['#8b5cf6', '#6366f1']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[s.cta, loading && { opacity: 0.7 }]}
@@ -235,109 +252,117 @@ export default function ChangeEmailScreen({ navigation }: Props) {
   );
 }
 
-const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.bgBottom,
-  },
-  banner: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: 20,
-    right: 20,
-    backgroundColor: C.success,
-    borderRadius: 12,
-    padding: 14,
-    zIndex: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: C.shadow,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 6,
-  },
-  bannerTxt: {
-    color: '#fff',
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 14,
-  },
+const createStyles = (c: any, isDark: boolean) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    banner: {
+      position: 'absolute',
+      top: Platform.OS === 'ios' ? 60 : 40,
+      left: 20,
+      right: 20,
+      backgroundColor: '#10b981',
+      borderRadius: 12,
+      padding: 14,
+      zIndex: 50,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      shadowColor: isDark ? '#000' : c.shadow,
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 6,
+    },
+    bannerTxt: {
+      color: '#fff',
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: 14,
+    },
 
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 58 : 36,
-    paddingBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  back: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: C.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  title: {
-    marginLeft: 20,
-    fontSize: 22,
-    color: C.text,
-    fontFamily: 'Poppins_700Bold',
-  },
+    header: {
+      paddingHorizontal: 24,
+      paddingTop: Platform.OS === 'ios' ? 58 : 36,
+      paddingBottom: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    back: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: isDark ? '#000' : c.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    title: {
+      marginLeft: 20,
+      fontSize: 22,
+      color: c.text,
+      fontFamily: 'Poppins_700Bold',
+    },
 
-  card: {
-    marginTop: 18,
-    marginHorizontal: 24,
-    backgroundColor: C.card,
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: C.shadow,
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
+    card: {
+      marginTop: 18,
+      marginHorizontal: 24,
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      padding: 24,
+      shadowColor: isDark ? '#000' : c.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 3,
+    },
 
-  label: {
-    fontSize: 16, color: C.text, marginBottom: 8, fontFamily: 'Poppins_600SemiBold'
-  },
-  input: {
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.inputBorder,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
-    color: C.slate700,
-  },
-  eye: { position: 'absolute', right: 12, top: 12 },
-  helper: {
-    marginTop: 8,
-    fontSize: 12,
-    color: C.slate400,
-    fontFamily: 'Poppins_400Regular',
-  },
+    label: {
+      fontSize: 16,
+      color: c.text,
+      marginBottom: 8,
+      fontFamily: 'Poppins_600SemiBold',
+    },
+    input: {
+      backgroundColor: isDark ? '#2d2a4a' : '#f8fafc',
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 14,
+      color: c.text,
+    },
+    disabledInput: {
+      backgroundColor: isDark ? '#1a1828' : '#eef2f7',
+      color: c.textSecondary,
+    },
+    eye: { position: 'absolute', right: 12, top: 12 },
+    helper: {
+      marginTop: 8,
+      fontSize: 12,
+      color: c.textSecondary,
+      fontFamily: 'Poppins_400Regular',
+    },
 
-  cta: {
-    height: 50,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#7c83ff',
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  ctaTxt: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
-  },
-}); 
+    cta: {
+      height: 50,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: isDark ? '#7c3aed' : '#7c83ff',
+      shadowOpacity: 0.35,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 3,
+    },
+    ctaTxt: {
+      color: '#fff',
+      fontSize: 16,
+      fontFamily: 'Poppins_700Bold',
+    },
+  }); 

@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NavigationContainer } from "@react-navigation/native";
+import { LinkingOptions, NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React, { useEffect, useState } from "react";
+import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import AddPatientScreen from "@/screens/AddPatientScreen";
@@ -11,9 +13,11 @@ import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import EditCaregiverProfileScreen from "@/screens/EditCaregiverProfileScreen";
 import ManageFacesScreen from "@/screens/ManageFacesScreen";
 import PatientDashboardScreen from "@/screens/PatientDashboardScreen";
+import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
 import { PatientProvider } from "../contexts/PatientContext";
+import { ThemeProvider, useTheme } from "../contexts/ThemeContext";
 import AddReminderScreen from "../screens/AddReminderScreen";
 import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
 import EditPatientDetailsScreen from "../screens/EditPatientDetailsScreen";
@@ -21,6 +25,7 @@ import LoginScreen from "../screens/LoginScreen";
 import PatientDetailsScreen from "../screens/PatientDetailsScreen";
 import PatientLocationScreen from "../screens/PatientLocationScreen";
 import SignupScreen from "../screens/SignupScreen";
+import { ApiService } from "../services/ApiService";
 import { supabase } from "../src/lib/supabase";
 
 export type RootStackParamList = {
@@ -29,7 +34,15 @@ export type RootStackParamList = {
   CaregiverDashboard: undefined;
   PatientDetails: undefined;
   EditPatientDetails: undefined;
-  PatientLocation: undefined;
+  PatientLocation: {
+    patientId?: string;
+    patientName?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    timestamp?: string;
+    source?: string;
+    fromAlert?: boolean;
+  } | undefined;
   Settings: undefined;
   ManageFaces: undefined;
   ChangeEmail: undefined;
@@ -39,10 +52,17 @@ export type RootStackParamList = {
   PatientDashboard: undefined; 
   VoiceAssistant: undefined;
   ApiConfiguration: undefined;
+  ResetPassword: undefined;
   AddReminder: {
     patientId: string;
+    reminderId?: string;
     prefill?: {
+      id?: string;
       title?: string;
+      type?: string;
+      medication?: string;
+      instructions?: string;
+      caregiver_note?: string;
       date?: Date;
       timeText?: string;
       hour?: number;
@@ -52,15 +72,153 @@ export type RootStackParamList = {
   } | undefined; 
 };
 
+type AppNavigatorProps = {
+  initialRoute: keyof RootStackParamList;
+  navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList> | null>;
+};
+
+// Deep linking configuration
+const prefix = Linking.createURL('/');
+
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: [prefix, 'cognify://', 'https://xlusfzcawhoqzmdfgkwj.supabase.co'],
+  config: {
+    screens: {
+      ResetPassword: 'reset-password',
+      Login: 'login',
+    },
+  },
+};
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+
+  // Listen for PASSWORD_RECOVERY auth event
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[App.tsx] Auth event:', event);
+      
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('[App.tsx] Password recovery detected, navigating to ResetPassword');
+        // Navigate to ResetPassword screen
+        setTimeout(() => {
+          if (navigationRef.current) {
+            navigationRef.current.reset({
+              index: 0,
+              routes: [{ name: 'ResetPassword' }],
+            });
+          }
+        }, 100);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Listen for deep link URL changes
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      console.log('[App.tsx] Deep link received:', event.url);
+      
+      // Check if this is a password reset link with tokens
+      if (event.url.includes('reset-password') || event.url.includes('type=recovery')) {
+        console.log('[App.tsx] Password reset link detected');
+        
+        // Extract tokens from URL fragment (after #)
+        const url = event.url;
+        const hashIndex = url.indexOf('#');
+        
+        if (hashIndex !== -1) {
+          const fragment = url.substring(hashIndex + 1);
+          const params = new URLSearchParams(fragment);
+          
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const type = params.get('type');
+          
+          console.log('[App.tsx] Token type:', type);
+          console.log('[App.tsx] Has access token:', !!accessToken);
+          
+          if (accessToken && refreshToken && type === 'recovery') {
+            try {
+              // Set the session with the tokens from the URL
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              
+              if (error) {
+                console.error('[App.tsx] Error setting session:', error);
+              } else {
+                console.log('[App.tsx] Session set successfully for:', data.user?.email);
+                
+                // Navigate to ResetPassword screen
+                setTimeout(() => {
+                  if (navigationRef.current) {
+                    navigationRef.current.reset({
+                      index: 0,
+                      routes: [{ name: 'ResetPassword' }],
+                    });
+                  }
+                }, 100);
+              }
+            } catch (err) {
+              console.error('[App.tsx] Exception setting session:', err);
+            }
+          }
+        } else {
+          // No fragment, just navigate
+          setTimeout(() => {
+            if (navigationRef.current) {
+              navigationRef.current.reset({
+                index: 0,
+                routes: [{ name: 'ResetPassword' }],
+              });
+            }
+          }, 500);
+        }
+      }
+    };
+
+    // Check if app was opened with a URL
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('[App.tsx] Initial URL:', url);
+        handleDeepLink({ url });
+      }
+    });
+
+    // Listen for URL changes while app is running
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
 // In App.tsx
 useEffect(() => {
   
   const checkLogin = async () => {
     try {
+      // Initialize ApiService with saved ngrok URL
+      await ApiService.initialize();
+      
       const { data: { session }, error } = await supabase.auth.getSession();
             
       if (error) {
@@ -101,31 +259,65 @@ useEffect(() => {
   }
 
   return (
-    <PatientProvider>
-      <NavigationContainer>
-        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-          <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
-          <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
-          <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
-          <Stack.Screen name="AddReminder" component={AddReminderScreen} />
-          <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
-          <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-          <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
-          <Stack.Screen name="AddPatient" component={AddPatientScreen} />
-          <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
-          <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
-          <Stack.Screen
-            name="EditPatientDetails"
-            component={EditPatientDetailsScreen}
-            options={{ headerShown: false }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </PatientProvider>
+    <ThemeProvider>
+      <PatientProvider>
+        <AppNavigator initialRoute={initialRoute} navigationRef={navigationRef} />
+      </PatientProvider>
+    </ThemeProvider>
+  );
+}
+
+function AppNavigator({ initialRoute, navigationRef }: AppNavigatorProps) {
+  const { colors, isDark } = useTheme();
+  const navigationTheme = {
+    dark: isDark,
+    colors: {
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.background,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.primary,
+    },
+    fonts: {
+      regular: { fontFamily: 'System', fontWeight: '400' as const },
+      medium: { fontFamily: 'System', fontWeight: '500' as const },
+      bold: { fontFamily: 'System', fontWeight: '700' as const },
+      heavy: { fontFamily: 'System', fontWeight: '800' as const },
+    },
+  };
+
+  return (
+    <NavigationContainer ref={navigationRef} linking={linking} theme={navigationTheme}>
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
+        <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
+        <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
+        <Stack.Screen name="AddReminder" component={AddReminderScreen} />
+        <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
+        <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
+        <Stack.Screen name="AddPatient" component={AddPatientScreen} />
+        <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
+        <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
+        <Stack.Screen
+          name="EditPatientDetails"
+          component={EditPatientDetailsScreen}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

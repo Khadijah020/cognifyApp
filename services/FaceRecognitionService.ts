@@ -2,12 +2,9 @@
 
 import axios from 'axios';
 import * as Speech from 'expo-speech';
+import { ApiService } from './ApiService';
 
-<<<<<<< HEAD
-const BACKEND_URL = 'https://411c0df88fb6.ngrok-free.app';
-=======
-const BACKEND_URL = 'https://3be3dc176e4c.ngrok-free.app';
->>>>>>> b5c56e052d5998fb49ff0fa8db4bd28961b02f1b
+
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 
@@ -19,7 +16,9 @@ class FaceRecognitionService {
     
     pollInterval = setInterval(async () => {
       try {
-        const res = await axios.get(`${BACKEND_URL}/get_face_recognitions`);
+        const res = await axios.get(ApiService.getApiEndpoint('/get_face_recognitions'), {
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+        });
         const faces = res.data.faces || [];
 
         if (faces.length > 0) {

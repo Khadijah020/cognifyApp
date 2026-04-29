@@ -2,27 +2,27 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import {
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../src/lib/supabase';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ChangePassword'>;
@@ -138,7 +138,8 @@ export default function ChangePasswordScreen({ navigation }: Props) {
     }
   };
 
-  const styles = createStyles(colors);
+  const { isDark: dark } = useTheme();
+  const styles = createStyles(colors, dark);
 
   if (!fontsLoaded || initialLoading) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
@@ -286,7 +287,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
   );
 }
 
-const createStyles = (c: any) =>
+const createStyles = (c: any, isDark: boolean) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
 
@@ -342,11 +343,11 @@ const createStyles = (c: any) =>
     scroll: { flex: 1, paddingHorizontal: 20 },
 
     card: {
-      backgroundColor: '#fff',
+      backgroundColor: c.surface,
       borderRadius: 20,
       padding: 20,
       marginTop: 16,
-      shadowColor: '#000',
+      shadowColor: isDark ? '#000' : c.shadow,
       shadowOpacity: 0.06,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 8 },
@@ -365,7 +366,7 @@ const createStyles = (c: any) =>
       alignItems: 'center',
       borderWidth: 1,
       borderColor: c.border,
-      backgroundColor: c.surface,
+      backgroundColor: isDark ? '#2d2a4a' : '#f8fafc',
       borderRadius: 12,
       height: 56,
     },
@@ -386,13 +387,13 @@ const createStyles = (c: any) =>
     saveButton: {
       marginTop: 24,
       marginHorizontal: 20,
-      backgroundColor: c.primary,
+      backgroundColor: isDark ? '#7c3aed' : c.primary,
       borderRadius: 16,
       height: 56,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#9aa2ff',
+      shadowColor: isDark ? '#7c3aed' : '#9aa2ff',
       shadowOpacity: 0.35,
       shadowRadius: 16,
       shadowOffset: { width: 0, height: 10 },

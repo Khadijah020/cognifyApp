@@ -11,35 +11,37 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  Linking,
-  Modal,
-  PanResponder,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    Linking,
+    Modal,
+    PanResponder,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { ApiService } from '../services/ApiService';
 import FallDetectionService from "../services/FallDetectionService";
 import HealthDataService from '../services/HealthDataService';
 
 import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
+import PatientDeviceStatusService from '../services/PatientDeviceStatusService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
 import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
 
 import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
 import axios from 'axios';
 
@@ -109,7 +111,6 @@ const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
 
 const STORAGE_KEY = 'cognify_recognized_faces';
-const BACKEND_URL = 'https://411c0df88fb6.ngrok-free.app'; // ⚠️ Update this to match your backend
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -202,6 +203,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ Load local faces from storage
   useEffect(() => {
     loadLocalFaces();
+    // Refresh API service cache to get latest ngrok URL
+    ApiService.refreshCache();
   }, []);
 
   const loadLocalFaces = async () => {
@@ -385,8 +388,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         const dueReminders = allReminders.filter(r => {
           const reminderTime = ReminderHelperService.parseReminderDateTime(r.date, r.time);
           const timeDiff = reminderTime.getTime() - now.getTime();
-          
-          return timeDiff >= -30 * 1000 && timeDiff < 2 * 60 * 1000;
+          // Show only in a tight window: 30s after due to 10s before due
+          return timeDiff >= -30 * 1000 && timeDiff <= 10 * 1000;
         });
 
         if (dueReminders.length > 0 && !showReminderNotification) {
@@ -418,7 +421,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     };
 
     checkForDueReminders();
-    const reminderCheckInterval = setInterval(checkForDueReminders, 20 * 1000);
+    // Poll more frequently so the 10s window is not missed
+    const reminderCheckInterval = setInterval(checkForDueReminders, 5 * 1000);
 
     return () => clearInterval(reminderCheckInterval);
   }, [patientId, showReminderNotification]);
@@ -473,14 +477,37 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     loadHealthData();
     const interval = setInterval(loadHealthData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadDeviceStatus();
+    const interval = setInterval(loadDeviceStatus, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  const loadDeviceStatus = async () => {
+    if (!patientId) return;
+
+    try {
+      const status = await PatientDeviceStatusService.collectDeviceStatus();
+      await PatientDeviceStatusService.syncPatientDeviceStatus(patientId, status);
+    } catch (error) {
+      console.log('Error syncing patient device status:', error);
+    }
+  };
 
   const loadHealthData = async () => {
     try {
-      const stepCount = await HealthDataService.getStepCount();
-      const minutes = await HealthDataService.getActiveMinutes();
-      setSteps(stepCount);
-      setActiveMinutes(minutes);
+      const healthData = await HealthDataService.getTodayHealthData();
+      setSteps(healthData.steps);
+      setActiveMinutes(healthData.activeMinutes);
+
+      if (patientId) {
+        await HealthDataService.syncPatientDailyHealthData(patientId, healthData);
+      }
     } catch (error) {
       console.log('Error loading health data:', error);
     }
@@ -491,7 +518,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get(`${BACKEND_URL}/get_reminders`);
+        const res = await axios.get(ApiService.getApiEndpoint('/get_reminders'), {
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+        });
         const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {
@@ -516,7 +545,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   useEffect(() => {
   const interval = setInterval(async () => {
     try {
-      const res = await axios.get(`${BACKEND_URL}/get_face_recognitions`);
+      const res = await axios.get(ApiService.getApiEndpoint('/get_face_recognitions'), {
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      });
       const faces: FaceRecognitionData[] = res.data.faces || [];
 
       if (faces.length > 0) {
@@ -913,7 +944,18 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <Text style={styles.greetSmall}>Good Morning</Text>
             <Text style={styles.greetName}>{patientName}</Text>
           </View>
-          <Image source={{ uri: AVATAR }} style={styles.avatar} />
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {patientName
+                ? patientName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'P'}
+            </Text>
+          </View>
         </View>
 
         {/* Call My Caregiver */}
@@ -1312,6 +1354,14 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     borderWidth: 2,
     borderColor: C.indigo300,
+    backgroundColor: '#818cf8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 20,
+    color: '#fff',
   },
 
   callBtn: {

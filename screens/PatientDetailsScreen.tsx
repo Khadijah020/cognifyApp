@@ -1,25 +1,26 @@
 import {
-  Poppins_300Light,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
+    Poppins_300Light,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatientDetails'>;
@@ -73,6 +74,7 @@ interface PatientData {
 }
 
 const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
     Poppins_300Light,
     Poppins_400Regular,
@@ -148,38 +150,39 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
     fetchPatient();
   }, []);
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: COLORS.bgTo }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: isDark ? '#0f0f1a' : COLORS.bgTo }} />;
 
   if (loading) {
     return (
-      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={COLORS.btnTo} />
-        <Text style={{ marginTop: 12, color: COLORS.slate500 }}>Loading patient details...</Text>
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#0f0f1a' : COLORS.bgTo }]}>
+        <ActivityIndicator size="large" color={isDark ? '#a78bfa' : COLORS.btnTo} />
+        <Text style={{ marginTop: 12, color: isDark ? '#9ca3af' : COLORS.slate500 }}>Loading patient details...</Text>
       </View>
     );
   }
 
   if (!patient) {
     return (
-      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ color: COLORS.slate500 }}>No patient details found for this caregiver.</Text>
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#0f0f1a' : COLORS.bgTo }]}>
+        <Text style={{ color: isDark ? '#9ca3af' : COLORS.slate500 }}>No patient details found for this caregiver.</Text>
       </View>
     );
   }
 
   const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
+  const gradientColors: [string, string] = isDark ? ['#0f0f1a', '#1a1a2e'] : [COLORS.bgFrom, COLORS.bgTo];
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={[COLORS.bgFrom, COLORS.bgTo]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back-ios-new" size={20} color={COLORS.slate600} />
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDark ? '#1e1e36' : COLORS.white }]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={isDark ? '#9ca3af' : COLORS.slate600} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Patient Details</Text>
-        <View style={{ width: 32 }} />
+        <Text style={[styles.headerTitle, { color: isDark ? '#e5e7eb' : COLORS.slate800 }]}>Patient Details</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -187,14 +190,14 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card */}
-        <View style={[styles.card, { marginTop: 8 }]}>
+        <View style={[styles.card, { marginTop: 8, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
           <View style={{ alignItems: 'center' }}>
             <View style={{ position: 'relative' }}>
               <View style={styles.avatar}>
                 {patient?.avatar_uri ? (
                   <Image source={{ uri: patient.avatar_uri }} style={styles.avatarImg} />
                 ) : (
-                  <MaterialIcons name="person" size={64} color={COLORS.slate400} />
+                  <MaterialIcons name="person" size={64} color={isDark ? '#6b7280' : COLORS.slate400} />
                 )}
               </View>
               <View style={styles.statusDotWrap}>
@@ -202,77 +205,89 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
 
-            <Text style={styles.name}>{safe(patient?.full_name)}</Text>
-            <Text style={styles.stage}>{safe(patient?.dementia_stage)}</Text>
+            <Text style={[styles.name, { color: isDark ? '#e5e7eb' : COLORS.slate800 }]}>{safe(patient?.full_name)}</Text>
+            <Text style={[styles.stage, { color: isDark ? '#a78bfa' : COLORS.indigo500 }]}>
+              {patient?.dementia_stage ? `Stage ${patient.dementia_stage}` : '—'}
+              {patient?.conditions ? ` • ${patient.conditions}` : ''}
+            </Text>
           </View>
         </View>
 
         {/* Personal Information */}
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        <View style={[styles.card, { gap: 24 }]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Personal Information</Text>
+        <View style={[styles.card, { gap: 24, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
           <Row
             bg={COLORS.blue100}
             icon={<MaterialIcons name="email" size={22} color={COLORS.blue500} />}
             label="Patient Email"
             value={safe(patient?.email)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.indigo100}
             icon={<MaterialIcons name="cake" size={22} color={COLORS.indigo500} />}
             label="Date of Birth"
             value={safe(patient?.dob)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.purple100}
             icon={<MaterialIcons name="home" size={22} color={COLORS.purple500} />}
             label="Address"
             value={safe(patient?.address)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.teal100}
             icon={<MaterialIcons name="call" size={22} color={COLORS.teal500} />}
             label="Emergency Contact"
             value={safe(patient?.emergency_contact)}
+            isDark={isDark}
           />
         </View>
 
         {/* Medical Details */}
-        <Text style={styles.sectionTitle}>Medical Details</Text>
-        <View style={[styles.card, { gap: 24 }]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Medical Details</Text>
+        <View style={[styles.card, { gap: 24, backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
           <Row
             bg={COLORS.red100}
             icon={<MaterialIcons name="warning-amber" size={22} color={COLORS.red500} />}
             label="Allergies"
             value={safe(patient?.allergies)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.blue100}
             icon={<MaterialCommunityIcons name="medical-bag" size={22} color={COLORS.blue500} />}
             label="Current Medications"
             value={safe(patient?.medications)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.green100}
             icon={<MaterialCommunityIcons name="heart-pulse" size={22} color={COLORS.green500} />}
             label="Medical Conditions"
             value={safe(patient?.conditions)}
+            isDark={isDark}
           />
         </View>
 
         {/* Preferences & Notes */}
-        <Text style={styles.sectionTitle}>Preferences & Notes</Text>
-        <View style={[styles.card]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>Preferences & Notes</Text>
+        <View style={[styles.card, { backgroundColor: isDark ? '#1e1e36' : COLORS.white }]}>
           <Row
             bg={COLORS.yellow100}
             icon={<MaterialIcons name="lightbulb" size={22} color={COLORS.yellow500} />}
             label="Notes for Care"
             value={safe(patient?.notes)}
+            isDark={isDark}
           />
           <Row
             bg={COLORS.pink100}
             icon={<MaterialIcons name="thumb-up" size={22} color={COLORS.pink500} />}
             label="Likes & Dislikes"
             value={safe(patient?.likes)}
+            isDark={isDark}
           />
         </View>
 
@@ -303,17 +318,19 @@ const Row = ({
   icon,
   label,
   value,
+  isDark,
 }: {
   bg: string;
   icon: React.ReactNode;
   label: string;
   value: string;
+  isDark?: boolean;
 }) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
     <View style={[styles.iconBg, { backgroundColor: bg }]}>{icon}</View>
     <View style={{ flex: 1 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={[styles.label, { color: isDark ? '#9ca3af' : COLORS.slate500 }]}>{label}</Text>
+      <Text style={[styles.value, { color: isDark ? '#e5e7eb' : COLORS.slate700 }]}>{value}</Text>
     </View>
   </View>
 );
@@ -328,7 +345,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backBtn: { padding: 6 },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 24,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   headerTitle: {
     fontSize: 22,
     color: COLORS.slate800,
