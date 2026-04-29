@@ -145,7 +145,9 @@ const [password, setPassword] = useState('');
 
 
     // 3️⃣ Send request to your backend endpoint
+    const response = await fetch('https://3be3dc176e4c.ngrok-free.app/register_patient', {
     const response = await fetch(ApiService.getApiEndpoint('/register_patient'), {
+
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

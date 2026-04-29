@@ -4,6 +4,7 @@ import axios from 'axios';
 import * as Speech from 'expo-speech';
 import { ApiService } from './ApiService';
 
+
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 

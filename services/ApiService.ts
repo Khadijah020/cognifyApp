@@ -1,3 +1,4 @@
+const NGROK_BASE_URL = 'https://3be3dc176e4c.ngrok-free.app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend notebook ngrok URL - can be overridden by user in settings.
@@ -20,6 +21,7 @@ const resolveNgrokUrl = (storedUrl: string | null): string => {
 
   return storedUrl;
 };
+
 
 export class ApiService {
   /**
