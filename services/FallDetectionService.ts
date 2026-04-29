@@ -9,9 +9,13 @@ class FallDetectionService {
   private impactDetected = false;
   private fallStartTime: number | null = null;
   private stillnessStartTime: number | null = null;
-  private fallAlertSent = false; // ✅ new flag
+  private fallAlertSent = false;
 
-  // --- Start detection ---
+  // --- Video fall polling state ---
+  private videoPollingInterval: ReturnType<typeof setInterval> | null = null;
+  private seenVideoFallIds = new Set<string>();
+
+  // --- Start sensor-based detection ---
   start(patientId: string, caregiverId: string) {
     if (this.subscription) return;
 
@@ -21,19 +25,64 @@ class FallDetectionService {
       this.detectFall(data, patientId, caregiverId);
     });
 
-    console.log("✅ Fall detection started");
+    console.log("✅ Sensor fall detection started");
   }
 
-  // --- Stop detection ---
+  // --- Stop sensor-based detection ---
   stop() {
     if (this.subscription) {
       this.subscription.remove();
       this.subscription = null;
-      console.log("🛑 Fall detection stopped");
+      console.log("🛑 Sensor fall detection stopped");
     }
   }
 
-  // --- Core fall detection logic ---
+  // --- Start polling backend for video-detected falls (patient device alert only) ---
+  startVideoPolling(patientId: string, caregiverId: string) {
+    if (this.videoPollingInterval) return;
+
+    console.log("📹 Video fall polling started (patient side)");
+
+    const poll = async () => {
+      try {
+        const response = await ApiService.getBackendFallAlerts(caregiverId, patientId);
+
+        for (const backendAlert of response.alerts) {
+          const fallId =
+            backendAlert.id ||
+            `${backendAlert.patient_id}:${backendAlert.timestamp || backendAlert.created_at}`;
+
+          if (this.seenVideoFallIds.has(fallId)) continue;
+          this.seenVideoFallIds.add(fallId);
+
+          console.log("🚨 Video fall detected on patient device:", backendAlert);
+
+          Vibration.vibrate([0, 500, 200, 500]);
+          Alert.alert(
+            "Fall Detected by Camera",
+            `A fall was detected by the camera. Please call for help if needed.`,
+            [{ text: "OK" }]
+          );
+        }
+      } catch (err) {
+        console.log("Video fall polling error:", err);
+      }
+    };
+
+    poll();
+    this.videoPollingInterval = setInterval(poll, 5000);
+  }
+
+  // --- Stop video fall polling ---
+  stopVideoPolling() {
+    if (this.videoPollingInterval) {
+      clearInterval(this.videoPollingInterval);
+      this.videoPollingInterval = null;
+      console.log("🛑 Video fall polling stopped");
+    }
+  }
+
+  // --- Core sensor fall detection logic ---
   private async detectFall(
     { x, y, z }: { x: number; y: number; z: number },
     patientId: string,
@@ -46,7 +95,6 @@ class FallDetectionService {
     const stillnessMax = 1.2;
     const stillness = acceleration > stillnessMin && acceleration < stillnessMax;
 
-    // Step 1: detect strong impact
     if (acceleration > impactThreshold && !this.impactDetected) {
       this.impactDetected = true;
       this.fallStartTime = Date.now();
@@ -54,11 +102,9 @@ class FallDetectionService {
       console.log("💥 Impact detected");
     }
 
-    // Step 2: track stillness progression
     if (this.impactDetected && this.fallStartTime && !this.fallAlertSent) {
       const elapsed = Date.now() - this.fallStartTime;
 
-      // After 2 seconds grace period, start checking stillness
       if (elapsed > 2000) {
         if (stillness) {
           if (!this.stillnessStartTime) {
@@ -67,33 +113,28 @@ class FallDetectionService {
             const stillElapsed = Date.now() - this.stillnessStartTime;
 
             if (stillElapsed >= 8000) {
-              // ✅ Confirm fall (only once)
               this.fallAlertSent = true;
-              console.log("🚨 Fall confirmed, sending alert...");
+              console.log("🚨 Sensor fall confirmed, sending alert...");
 
               Vibration.vibrate();
               Alert.alert("⚠️ Fall Detected", "A fall has been detected!");
 
               await this.sendAlert(patientId, caregiverId);
 
-              // small delay before resetting to avoid duplicate triggers
               setTimeout(() => this.reset(), 5000);
             }
           }
         } else {
-          // Movement after impact cancels fall detection
           this.reset();
         }
       }
 
-      // Timeout after 20s if no confirmation
       if (elapsed > 20000) {
         this.reset();
       }
     }
   }
 
-  // --- Reset internal state ---
   private reset() {
     this.impactDetected = false;
     this.fallStartTime = null;
@@ -101,7 +142,6 @@ class FallDetectionService {
     this.fallAlertSent = false;
   }
 
-  // --- Send alert to Supabase ---
   private async sendAlert(patientId: string, caregiverId: string) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();

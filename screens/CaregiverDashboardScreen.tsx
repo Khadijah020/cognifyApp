@@ -329,21 +329,43 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     return () => FallAlertListener.stopListening();
   }, [caregiverId, patientId, patientName]);
 
-  // Poll backend video-fall queue. Supabase realtime still handles sensor alerts.
+  // Poll backend video-fall queue and persist to Supabase so FallAlertListener fires.
   useEffect(() => {
     if (!caregiverId) return;
 
     let cancelled = false;
+    const savedVideoFallIds = new Set<string>();
 
     const pollBackendFallAlerts = async () => {
       const response = await ApiService.getBackendFallAlerts(caregiverId, patientId || undefined);
       if (cancelled) return;
 
       for (const backendAlert of response.alerts) {
+        const fallId =
+          backendAlert.id ||
+          `${backendAlert.patient_id}:${backendAlert.timestamp || backendAlert.created_at}`;
+
         handleIncomingFallAlert({
           ...backendAlert,
           source: backendAlert.source || 'video',
         });
+
+        // Save to Supabase once per session so FallAlertListener fires push notification
+        if (!savedVideoFallIds.has(fallId)) {
+          savedVideoFallIds.add(fallId);
+          const alertRecord = {
+            patient_id: backendAlert.patient_id || patientId,
+            caregiver_id: backendAlert.caregiver_id || caregiverId,
+            latitude: null as number | null,
+            longitude: null as number | null,
+            status: 'active',
+            created_at: backendAlert.timestamp || backendAlert.created_at || new Date().toISOString(),
+          };
+          supabase.from('fall_alerts').insert([alertRecord]).then(({ error }) => {
+            if (error) console.log('Video fall Supabase save error:', error.message);
+            else console.log('✅ Video fall saved to Supabase (caregiver side)');
+          });
+        }
       }
     };
 
