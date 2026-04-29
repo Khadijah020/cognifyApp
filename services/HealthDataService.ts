@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pedometer } from 'expo-sensors';
+import { Platform } from 'react-native';
 import { supabase } from '../src/lib/supabase';
 
 const MOCK_HEALTH_DATA_KEY = '@cognify_mock_health_data';
@@ -169,12 +170,12 @@ class HealthDataService {
       } else if (this.pedometerAvailable) {
         return await this.getPedometerStepCount();
       } else {
-        console.log('Pedometer not available, using cached data');
-        return (await this.getCachedRealStepCount()) ?? 0;
+        console.log('Pedometer not available, using cached or mock data');
+        return (await this.getCachedRealStepCount()) ?? await this.getMockStepCount();
       }
     } catch (error) {
       console.log('Error getting steps from device APIs:', error);
-      return (await this.getCachedRealStepCount()) ?? 0;
+      return (await this.getCachedRealStepCount()) ?? await this.getMockStepCount();
     }
   }
 
@@ -206,8 +207,16 @@ class HealthDataService {
       console.log('Error getting steps from Pedometer, trying cached data:', error);
       // Try to get last cached real step count
       const cachedSteps = await this.getCachedRealStepCount();
-      return cachedSteps ?? 0;
+      return cachedSteps ?? await this.getMockStepCount();
     }
+  }
+
+  private async getIOSStepCount(): Promise<number> {
+    return this.getPedometerStepCount();
+  }
+
+  private async getAndroidStepCount(): Promise<number> {
+    return this.getPedometerStepCount();
   }
 
   async getActiveMinutes(): Promise<number> {
@@ -346,13 +355,16 @@ class HealthDataService {
   }
 
   async isHealthDataAvailable(): Promise<{ steps: boolean; activeMinutes: boolean }> {
-    await this.checkPedometerAvailability();
+    await this.initialize();
+    const hasHealthData =
+      this.pedometerAvailable ||
+      this.healthKitAvailable ||
+      this.googleFitAvailable ||
+      this.currentSource === 'mock';
     
     return {
       steps: hasHealthData,
       activeMinutes: hasHealthData,
-      source: this.currentSource,
-      platform: Platform.OS
     };
   }
 

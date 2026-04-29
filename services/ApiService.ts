@@ -261,7 +261,7 @@ export class ApiService {
    */
   static async getBackendFallAlerts(caregiverId?: string, patientId?: string): Promise<{ alerts: any[] }> {
     try {
-      const endpoint = this.getApiEndpoint('/get_fall_detections');
+      const endpoint = this.getApiEndpoint('/get_fall_detections?clear=false');
       const response = await fetch(endpoint, {
         headers: {
           'ngrok-skip-browser-warning': 'true',

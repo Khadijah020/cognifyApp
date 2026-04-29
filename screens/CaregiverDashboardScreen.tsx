@@ -241,14 +241,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     const shown = shownFallAlertsRef.current;
 
     for (const [key, timestamp] of shown.entries()) {
-      if (now - timestamp > FALL_ALERT_COOLDOWN_MS) {
+      if (!key.startsWith('id:') && now - timestamp > FALL_ALERT_COOLDOWN_MS) {
         shown.delete(key);
       }
     }
 
     const alertKey = incomingAlert.id
-      ? `alert:${incomingAlert.id}`
-      : `alert:${incomingAlert.patient_id || patientId || 'unknown'}:${incomingAlert.created_at || ''}:${incomingAlert.source || 'unknown'}`;
+      ? `id:${incomingAlert.id}`
+      : `fallback:${incomingAlert.patient_id || patientId || 'unknown'}:${incomingAlert.created_at || ''}:${incomingAlert.source || 'unknown'}`;
     if (shown.has(alertKey)) {
       return false;
     }

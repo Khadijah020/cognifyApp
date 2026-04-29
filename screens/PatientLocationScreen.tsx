@@ -20,6 +20,7 @@ import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
 import * as CaregiverService from '../services/CaregiverService';
 import PatientDeviceStatusService from '../services/PatientDeviceStatusService';
+import { getAuthenticatedPatientProfile } from '../services/PatientService';
 
 import {
     Poppins_400Regular,
@@ -128,6 +129,15 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
 
     const fetchPatientName = async () => {
       try {
+        const patientProfile = await getAuthenticatedPatientProfile();
+        if (patientProfile?.full_name) {
+          setPatientInfo((prev) => ({
+            ...prev,
+            name: patientProfile.full_name || 'Patient',
+          }));
+          return;
+        }
+
         const id = await CaregiverService.getCurrentCaregiversId();
         if (id) {
           const patient = await CaregiverService.getPrimaryPatient(id);
