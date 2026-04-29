@@ -15,6 +15,8 @@ import {
     Alert,
     Animated,
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
     Linking,
     Modal,
     PanResponder,
@@ -22,7 +24,9 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
+
     View,
 } from 'react-native';
 import { RootStackParamList } from '../app/App';
@@ -79,6 +83,12 @@ type FaceRecognitionData = {
   relationship: string;
   confidence: number;
   timestamp: string;
+};
+
+type Note = {
+  id: string;
+  text: string;
+  createdAt: string;
 };
 
 const C = {
@@ -145,6 +155,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ NEW: Recent activities state
   const [recentActivities, setRecentActivities] = useState<PatientActivity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
+
+  // Notes state
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [newNoteText, setNewNoteText] = useState('');
 
   // Modal animation
   const translateY = useRef(new Animated.Value(0)).current;
@@ -219,6 +234,63 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
+  const loadNotes = async (pid: string) => {
+    try {
+      const stored = await AsyncStorage.getItem(`patient_notes_${pid}`);
+      if (stored) setNotes(JSON.parse(stored));
+    } catch (error) {
+      console.error('❌ Error loading notes:', error);
+    }
+  };
+
+  const saveNote = async () => {
+    const text = newNoteText.trim();
+    if (!text || !patientId) return;
+
+    const note: Note = {
+      id: Date.now().toString(),
+      text,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [note, ...notes];
+    setNotes(updated);
+    setNewNoteText('');
+    Keyboard.dismiss();
+
+    try {
+      await AsyncStorage.setItem(`patient_notes_${patientId}`, JSON.stringify(updated));
+    } catch (error) {
+      console.error('❌ Error saving note:', error);
+    }
+  };
+
+  const deleteNote = async (id: string) => {
+    Alert.alert('Delete Note', 'Are you sure you want to delete this note?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const updated = notes.filter(n => n.id !== id);
+          setNotes(updated);
+          try {
+            await AsyncStorage.setItem(`patient_notes_${patientId}`, JSON.stringify(updated));
+          } catch (error) {
+            console.error('❌ Error deleting note:', error);
+          }
+        },
+      },
+    ]);
+  };
+
+  const formatNoteDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      + ' · '
+      + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
   // ✅ Animate face popup in
   const showFaceRecognitionPopup = (face: RecognizedFace & { confidence?: number }) => {
     setRecognizedFace(face);
@@ -280,6 +352,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       console.log('✅ Patient profile loaded:', patientProfile.id, patientProfile.full_name);
       setPatientId(patientProfile.id);
       setPatientName(patientProfile.full_name || 'Patient');
+      loadNotes(patientProfile.id);
 
       const caregiverIdFromProfile = patientProfile.caregiver_id;
       
@@ -289,6 +362,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         
         console.log('🚀 Starting fall detection service...');
         FallDetectionService.start(patientProfile.id, caregiverIdFromProfile);
+        FallDetectionService.startVideoPolling(patientProfile.id, caregiverIdFromProfile);
         console.log('✅ Fall detection service started successfully');
       } else {
         console.warn('⚠️ No caregiver assigned to this patient');
@@ -336,6 +410,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       clearInterval(interval);
       subscription.unsubscribe();
       FallDetectionService.stop();
+      FallDetectionService.stopVideoPolling();
     };
   }, [patientId]);
 
@@ -1005,6 +1080,23 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
+        <View style={{ paddingHorizontal: 24, marginTop: 12 }}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[styles.card, styles.notesQuickItem]}
+            onPress={() => setShowNotesModal(true)}
+          >
+            <MaterialIcons name="edit-note" size={28} color={C.indigo500} />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={styles.quickText}>Take Notes</Text>
+              <Text style={styles.rowSmall}>
+                {notes.length === 0 ? 'No notes yet' : `${notes.length} note${notes.length > 1 ? 's' : ''} saved`}
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
+          </TouchableOpacity>
+        </View>
+
         {/* Upcoming Reminders */}
         <View style={{ flexDirection: 'row', marginTop: 26, marginBottom: 12, paddingLeft: 27 }}>
           <Text style={styles.sectionTitle2}>Upcoming Reminders (24h)</Text>
@@ -1144,6 +1236,97 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         face={recognizedFace}
         onClose={hideFaceRecognitionPopup}
       />
+
+      {/* Notes Modal */}
+      <Modal
+        visible={showNotesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+      >
+        <View style={notesStyles.overlay}>
+          {/* Tappable backdrop closes the modal */}
+          <TouchableOpacity
+            style={notesStyles.backdrop}
+            activeOpacity={1}
+            onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+          />
+
+          {/* KeyboardAvoidingView wraps only the sheet so it lifts with the keyboard */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={notesStyles.sheet}>
+              {/* Header */}
+              <View style={notesStyles.headerRow}>
+                <View style={notesStyles.headerLeft}>
+                  <MaterialIcons name="edit-note" size={26} color={C.indigo500} />
+                  <Text style={notesStyles.title}>My Notes</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialIcons name="close" size={24} color={C.slate500} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Input area */}
+              <View style={notesStyles.inputRow}>
+                <TextInput
+                  style={notesStyles.input}
+                  placeholder="Write a note..."
+                  placeholderTextColor={C.slate400}
+                  value={newNoteText}
+                  onChangeText={setNewNoteText}
+                  multiline
+                  maxLength={500}
+                />
+                <TouchableOpacity
+                  style={[notesStyles.saveBtn, !newNoteText.trim() && notesStyles.saveBtnDisabled]}
+                  onPress={saveNote}
+                  disabled={!newNoteText.trim()}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="send" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Notes list — explicit maxHeight so ScrollView gets real space */}
+              <ScrollView
+                style={notesStyles.list}
+                contentContainerStyle={notesStyles.listContent}
+                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {notes.length === 0 ? (
+                  <View style={notesStyles.emptyState}>
+                    <MaterialIcons name="notes" size={48} color={C.slate300} />
+                    <Text style={notesStyles.emptyText}>No notes yet</Text>
+                    <Text style={notesStyles.emptySubText}>Your notes will appear here</Text>
+                  </View>
+                ) : (
+                  notes.map(note => (
+                    <View key={note.id} style={notesStyles.noteCard}>
+                      <Text style={notesStyles.noteText}>{note.text}</Text>
+                      <View style={notesStyles.noteFooter}>
+                        <Text style={notesStyles.noteDate}>{formatNoteDate(note.createdAt)}</Text>
+                        <TouchableOpacity
+                          onPress={() => deleteNote(note.id)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <MaterialIcons name="delete-outline" size={18} color={C.slate400} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       {/* Reminder Details Modal */}
       <Modal
@@ -1487,6 +1670,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     color: C.slate700,
+  },
+  notesQuickItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 16,
   },
 
   reminderCard: {
@@ -1948,9 +2137,126 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 18,
   },
-  closeText: { 
-    fontFamily: 'Poppins_600SemiBold', 
+  closeText: {
+    fontFamily: 'Poppins_600SemiBold',
     color: '#fff',
     fontSize: 16,
+  },
+});
+
+const notesStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 20,
+    color: C.slate800,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+    marginBottom: 16,
+  },
+  input: {
+    flex: 1,
+    minHeight: 48,
+    maxHeight: 120,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 15,
+    color: C.slate800,
+    textAlignVertical: 'top',
+  },
+  saveBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: C.indigo500,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnDisabled: {
+    backgroundColor: C.slate300,
+  },
+  list: {
+    maxHeight: 380,
+  },
+  listContent: {
+    paddingBottom: 12,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 16,
+    color: C.slate500,
+    marginTop: 12,
+  },
+  emptySubText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    color: C.slate400,
+    marginTop: 4,
+  },
+  noteCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: C.indigo500,
+  },
+  noteText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 15,
+    color: C.slate700,
+    lineHeight: 22,
+  },
+  noteFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  noteDate: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 11,
+    color: C.slate400,
   },
 });
