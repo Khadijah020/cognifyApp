@@ -291,22 +291,28 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
       return true;
     };
 
-    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      handleNotificationData(notification.request.content.data);
-    });
+    let receivedSubscription: any;
+    let responseSubscription: any;
+    try {
+      receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+        handleNotificationData(notification.request.content.data);
+      });
 
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationData(response.notification.request.content.data);
-    });
+      responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        handleNotificationData(response.notification.request.content.data);
+      });
 
-    const lastResponse = Notifications.getLastNotificationResponse();
-    if (lastResponse && handleNotificationData(lastResponse.notification.request.content.data)) {
-      Notifications.clearLastNotificationResponse();
+      const lastResponse = Notifications.getLastNotificationResponse();
+      if (lastResponse && handleNotificationData(lastResponse.notification.request.content.data)) {
+        Notifications.clearLastNotificationResponse();
+      }
+    } catch (e) {
+      console.log('Notification listeners unavailable in this environment');
     }
 
     return () => {
-      receivedSubscription.remove();
-      responseSubscription.remove();
+      receivedSubscription?.remove();
+      responseSubscription?.remove();
     };
   }, [caregiverId, patientId, patientName]);
 

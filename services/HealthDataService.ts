@@ -87,26 +87,56 @@ class HealthDataService {
     }
   }
 
-  /**
-   * Check if Google Fit is available (Android only)
-   * Note: This requires react-native-google-fit package for full functionality
-   * The Pedometer API on Android uses the device's step counter sensor
-   */
-  private async checkGoogleFitAvailability(): Promise<boolean> {
-    if (Platform.OS !== 'android') return false;
-    
-    try {
-      // expo-sensors Pedometer on Android uses the step counter sensor
-      // For full Google Fit access, you would need react-native-google-fit
-      // For now, we rely on Pedometer which gives us step data from the device sensor
-      const isAvailable = await Pedometer.isAvailableAsync();
-      return isAvailable;
-    } catch (error) {
-      console.log('Google Fit check error:', error);
-      return false;
-    }
-  }
 
+  private async requestAndroidActivityPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  try {
+    // PermissionsAndroid hangs in Expo Go — use expo-modules approach instead
+    const { PermissionsAndroid } = require('react-native');
+    
+    // Check if already granted first
+    const alreadyGranted = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION
+    );
+    console.log('📱 ACTIVITY_RECOGNITION already granted:', alreadyGranted);
+    if (alreadyGranted) return true;
+
+    const result = await Promise.race([
+      PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION,
+        {
+          title: 'Step Counter Permission',
+          message: 'This app needs access to your step counter.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        }
+      ),
+      // ✅ Timeout after 10s so it never hangs forever
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 10000))
+    ]);
+
+    console.log('📱 Permission result:', result);
+    return result === PermissionsAndroid.RESULTS.GRANTED;
+  } catch (error) {
+    console.log('📱 Permission request error:', error);
+    return false;
+  }
+}
+
+private async checkGoogleFitAvailability(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  try {
+    const granted = await this.requestAndroidActivityPermission();
+    console.log('📱 Android permission granted:', granted);
+    // ✅ Try pedometer regardless — some devices work without explicit permission
+    const isAvailable = await Pedometer.isAvailableAsync();
+    console.log('📱 Android pedometer available:', isAvailable);
+    return isAvailable;
+  } catch (error) {
+    console.log('📱 checkGoogleFitAvailability error:', error);
+    return false;
+  }
+}
   /**
    * Determine the best health data source based on platform and availability
    */
@@ -370,6 +400,7 @@ class HealthDataService {
 
   async requestHealthPermissions(): Promise<boolean> {
     try {
+      console.log("🏃 requestHealthPermissions called, platform:", Platform.OS);
       await this.initialize();
       
       if (Platform.OS === 'ios') {
