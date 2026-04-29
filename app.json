@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMotionUsageDescription": "Cognify uses motion data to show the patient's daily step count.",
-        "NSLocationWhenInUseUsageDescription": "Cognify uses location to share the patient's latest location with their caregiver."
+        "NSLocationWhenInUseUsageDescription": "Cognify uses location to share the patient's latest location with their caregiver.",
+        "NSPhotoLibraryUsageDescription": "Cognify needs access to your photo library to upload a video for step verification."
       }
     },
     "android": {
@@ -26,6 +27,12 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cognify needs access to your photo library to upload a video for step verification."
+        }
+      ],
       [
         "expo-splash-screen",
         {
