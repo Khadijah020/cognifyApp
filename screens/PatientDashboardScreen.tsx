@@ -85,12 +85,12 @@ type FaceRecognitionData = {
   timestamp: string;
 };
 
-<<<<<<< HEAD
 type Note = {
   id: string;
   text: string;
   createdAt: string;
-=======
+};
+
 type FallAlertData = {
   id?: string;
   patient_id?: string;
@@ -103,7 +103,6 @@ type FallAlertData = {
   source?: string;
   confidence?: number;
   fall_probability?: number;
->>>>>>> b0eaa8f8d9a101e06749c43f72ff84397f76a4f5
 };
 
 const C = {
