@@ -85,10 +85,25 @@ type FaceRecognitionData = {
   timestamp: string;
 };
 
+<<<<<<< HEAD
 type Note = {
   id: string;
   text: string;
   createdAt: string;
+=======
+type FallAlertData = {
+  id?: string;
+  patient_id?: string;
+  caregiver_id?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  status?: string;
+  created_at?: string;
+  patient_name?: string;
+  source?: string;
+  confidence?: number;
+  fall_probability?: number;
+>>>>>>> b0eaa8f8d9a101e06749c43f72ff84397f76a4f5
 };
 
 const C = {
@@ -121,6 +136,7 @@ const AVATAR =
   'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
 
 const STORAGE_KEY = 'cognify_recognized_faces';
+const FALL_ALERT_COOLDOWN_MS = 2 * 60 * 1000;
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -155,6 +171,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ NEW: Recent activities state
   const [recentActivities, setRecentActivities] = useState<PatientActivity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
+  const [fallAlert, setFallAlert] = useState<FallAlertData | null>(null);
 
   // Notes state
   const [showNotesModal, setShowNotesModal] = useState(false);
@@ -165,6 +182,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const translateY = useRef(new Animated.Value(0)).current;
   const sheetHeight = useRef(0);
   const DRAG_CLOSE_THRESHOLD = 120;
+  const shownFallAlertsRef = useRef<Map<string, number>>(new Map());
 
   // ✅ Face popup animation
   const facePopupScale = useRef(new Animated.Value(0)).current;
@@ -196,6 +214,56 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
   const [currentContextualReminder, setCurrentContextualReminder] = useState<string | undefined>(undefined);
   const [showContextualReminder, setShowContextualReminder] = useState(false);
+
+  const shouldShowFallAlert = (incomingAlert: FallAlertData) => {
+    const now = Date.now();
+    const shown = shownFallAlertsRef.current;
+
+    for (const [key, timestamp] of shown.entries()) {
+      if (!key.startsWith('id:') && now - timestamp > FALL_ALERT_COOLDOWN_MS) {
+        shown.delete(key);
+      }
+    }
+
+    const alertKey = incomingAlert.id
+      ? `id:${incomingAlert.id}`
+      : `fallback:${incomingAlert.patient_id || patientId || 'unknown'}:${incomingAlert.created_at || ''}:${incomingAlert.source || 'unknown'}`;
+
+    if (shown.has(alertKey)) {
+      return false;
+    }
+
+    shown.set(alertKey, now);
+    return true;
+  };
+
+  const handleIncomingFallAlert = (incomingAlert: FallAlertData & { timestamp?: string }) => {
+    const normalizedAlert: FallAlertData = {
+      ...incomingAlert,
+      patient_id: incomingAlert.patient_id || patientId || undefined,
+      caregiver_id: incomingAlert.caregiver_id || caregiverId || undefined,
+      patient_name: incomingAlert.patient_name || patientName,
+      status: incomingAlert.status || 'active',
+      source: incomingAlert.source || 'video',
+      created_at: incomingAlert.created_at || incomingAlert.timestamp || new Date().toISOString(),
+    };
+
+    if (!shouldShowFallAlert(normalizedAlert)) {
+      console.log('Skipping duplicate patient fall alert:', normalizedAlert);
+      return;
+    }
+
+    setFallAlert(normalizedAlert);
+    loadRecentActivities();
+
+    if (voiceAlertsEnabled) {
+      Speech.speak('A fall has been detected. Your caregiver has been notified.', {
+        language: 'en-US',
+        pitch: 1.0,
+        rate: 0.9,
+      });
+    }
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -425,6 +493,32 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     return () => clearInterval(interval);
   }, [patientId]);
+
+  useEffect(() => {
+    if (!patientId || !caregiverId) return;
+
+    let cancelled = false;
+
+    const pollBackendFallAlerts = async () => {
+      const response = await ApiService.getBackendFallAlerts(caregiverId, patientId);
+      if (cancelled) return;
+
+      for (const backendAlert of response.alerts) {
+        handleIncomingFallAlert({
+          ...backendAlert,
+          source: backendAlert.source || 'video',
+        });
+      }
+    };
+
+    pollBackendFallAlerts();
+    const interval = setInterval(pollBackendFallAlerts, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [patientId, caregiverId, patientName, voiceAlertsEnabled]);
 
   // ✅ NEW: Load recent activities function
   const loadRecentActivities = async () => {
@@ -1073,7 +1167,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           <TouchableOpacity
             activeOpacity={0.9}
             style={[styles.card, styles.quickItem]}
-            onPress={() => navigation.navigate('PatientLocation')}
+            onPress={() => navigation.navigate('PatientLocation', {
+              patientName,
+            })}
           >
             <MaterialIcons name="location-on" size={30} color={C.indigo500} />
             <Text style={styles.quickText}>Location</Text>
@@ -1231,6 +1327,65 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       </ScrollView>
 
       {/* ✅ Face Recognition Popup */}
+      {/* Fall Alert Popup */}
+      <Modal visible={!!fallAlert} transparent animationType="fade">
+        <BlurView intensity={40} tint="dark" style={fallStyles.overlay}>
+          <View style={fallStyles.centered}>
+            <View style={fallStyles.cardContainer}>
+              <TouchableOpacity style={fallStyles.closeButton} onPress={() => setFallAlert(null)}>
+                <MaterialIcons name="close" size={30} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+
+              <LinearGradient
+                colors={['#f87171', '#f472b6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={fallStyles.card}
+              >
+                <View style={fallStyles.iconWrapper}>
+                  <MaterialIcons name="personal-injury" size={50} color="#fff" />
+                </View>
+
+                <Text style={fallStyles.title}>FALL DETECTED</Text>
+                <Text style={fallStyles.alertText}>
+                  We detected a possible fall. Your caregiver has been notified.
+                </Text>
+                <Text style={fallStyles.timestamp}>
+                  {fallAlert?.created_at
+                    ? (() => {
+                        const date = new Date(fallAlert.created_at.endsWith('Z') ? fallAlert.created_at : `${fallAlert.created_at}Z`);
+                        return `Timestamp: ${date.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}, ${date.toLocaleDateString()}`;
+                      })()
+                    : 'Timestamp: Just now'}
+                </Text>
+
+                <View style={fallStyles.buttonGroup}>
+                  <TouchableOpacity
+                    style={fallStyles.primaryButton}
+                    onPress={() => setFallAlert(null)}
+                  >
+                    <MaterialIcons name="check-circle" size={22} color="#e11d48" />
+                    <Text style={fallStyles.primaryText}>I'm OK</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={fallStyles.secondaryButton}
+                    onPress={callCaregiver}
+                  >
+                    <MaterialIcons name="call" size={20} color="#fff" />
+                    <Text style={fallStyles.secondaryText}>Call Caregiver</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </BlurView>
+      </Modal>
+
+      {/* Face Recognition Popup */}
       <FaceRecognitionPopup
         visible={showFacePopup}
         face={recognizedFace}
@@ -1948,6 +2103,102 @@ const styles = StyleSheet.create({
 });
 
 // ✅ Face Recognition Popup Styles
+const fallStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  centered: {
+    width: '100%',
+    maxWidth: 400,
+  },
+  cardContainer: {
+    position: 'relative',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    zIndex: 10,
+  },
+  card: {
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#f472b6',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+    elevation: 10,
+  },
+  iconWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontFamily: 'Poppins_700Bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  alertText: {
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 4,
+    fontFamily: 'Poppins_500Medium',
+  },
+  timestamp: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    marginBottom: 28,
+    fontFamily: 'Poppins_400Regular',
+  },
+  buttonGroup: {
+    width: '100%',
+    gap: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  primaryText: {
+    color: '#e11d48',
+    fontSize: 17,
+    fontFamily: 'Poppins_700Bold',
+  },
+  secondaryButton: {
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  secondaryText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+});
+
 const faceStyles = StyleSheet.create({
   overlay: {
     flex: 1,

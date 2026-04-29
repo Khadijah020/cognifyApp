@@ -1,3 +1,4 @@
+const NGROK_BASE_URL = 'https://0e89-34-125-209-37.ngrok-free.app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend notebook ngrok URL - can be overridden by user in settings.
@@ -260,7 +261,7 @@ export class ApiService {
    */
   static async getBackendFallAlerts(caregiverId?: string, patientId?: string): Promise<{ alerts: any[] }> {
     try {
-      const endpoint = this.getApiEndpoint('/get_fall_detections');
+      const endpoint = this.getApiEndpoint('/get_fall_detections?clear=false');
       const response = await fetch(endpoint, {
         headers: {
           'ngrok-skip-browser-warning': 'true',

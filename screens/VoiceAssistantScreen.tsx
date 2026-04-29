@@ -326,6 +326,14 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
         end={{ x: 1, y: 1 }}
         style={styles.overlay}
       >
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleCancel}
+          style={styles.backBtn}
+        >
+          <MaterialIcons name="arrow-back" size={26} color="#fff" />
+        </TouchableOpacity>
+
         <View style={styles.centerTop}>
           <Text style={[styles.title, { fontFamily: "Poppins_700Bold" }]}>
             {isRecording
@@ -493,6 +501,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 120,
     paddingBottom: 32,
+  },
+  backBtn: {
+    position: "absolute",
+    top: 48,
+    left: 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
   },
   centerTop: { alignItems: "center", marginBottom: 20 },
   title: { color: C.white, fontSize: 28, textAlign: "center" },
