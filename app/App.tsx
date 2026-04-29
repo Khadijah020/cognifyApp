@@ -17,7 +17,7 @@ import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen";
 import { PatientProvider } from "../contexts/PatientContext";
-import { ThemeProvider } from "../contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "../contexts/ThemeContext";
 import AddReminderScreen from "../screens/AddReminderScreen";
 import CaregiverDashboardScreen from "../screens/CaregiverDashboardScreen";
 import EditPatientDetailsScreen from "../screens/EditPatientDetailsScreen";
@@ -35,6 +35,7 @@ export type RootStackParamList = {
   PatientDetails: undefined;
   EditPatientDetails: undefined;
   PatientLocation: {
+    patientId?: string;
     patientName?: string;
     latitude?: number | null;
     longitude?: number | null;
@@ -56,7 +57,12 @@ export type RootStackParamList = {
     patientId: string;
     reminderId?: string;
     prefill?: {
+      id?: string;
       title?: string;
+      type?: string;
+      medication?: string;
+      instructions?: string;
+      caregiver_note?: string;
       date?: Date;
       timeText?: string;
       hour?: number;
@@ -64,6 +70,11 @@ export type RootStackParamList = {
       period?: 'AM' | 'PM';
     };
   } | undefined; 
+};
+
+type AppNavigatorProps = {
+  initialRoute: keyof RootStackParamList;
+  navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList> | null>;
 };
 
 // Deep linking configuration
@@ -250,32 +261,63 @@ useEffect(() => {
   return (
     <ThemeProvider>
       <PatientProvider>
-        <NavigationContainer ref={navigationRef} linking={linking}>
-          <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Signup" component={SignupScreen} />
-            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-            <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
-            <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
-            <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
-            <Stack.Screen name="AddReminder" component={AddReminderScreen} />
-            <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
-            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-            <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
-            <Stack.Screen name="AddPatient" component={AddPatientScreen} />
-            <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
-            <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
-            <Stack.Screen
-              name="EditPatientDetails"
-              component={EditPatientDetailsScreen}
-              options={{ headerShown: false }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
+        <AppNavigator initialRoute={initialRoute} navigationRef={navigationRef} />
       </PatientProvider>
     </ThemeProvider>
+  );
+}
+
+function AppNavigator({ initialRoute, navigationRef }: AppNavigatorProps) {
+  const { colors, isDark } = useTheme();
+  const navigationTheme = {
+    dark: isDark,
+    colors: {
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.background,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.primary,
+    },
+    fonts: {
+      regular: { fontFamily: 'System', fontWeight: '400' as const },
+      medium: { fontFamily: 'System', fontWeight: '500' as const },
+      bold: { fontFamily: 'System', fontWeight: '700' as const },
+      heavy: { fontFamily: 'System', fontWeight: '800' as const },
+    },
+  };
+
+  return (
+    <NavigationContainer ref={navigationRef} linking={linking} theme={navigationTheme}>
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
+        <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} /> 
+        <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
+        <Stack.Screen name="AddReminder" component={AddReminderScreen} />
+        <Stack.Screen name="PatientLocation" component={PatientLocationScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="ManageFaces" component={ManageFacesScreen} />
+        <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="EditCaregiverProfile" component={EditCaregiverProfileScreen} />
+        <Stack.Screen name="AddPatient" component={AddPatientScreen} />
+        <Stack.Screen name="VoiceAssistant" component={VoiceAssistantScreen} />
+        <Stack.Screen name="ApiConfiguration" component={ApiConfigurationScreen} />
+        <Stack.Screen
+          name="EditPatientDetails"
+          component={EditPatientDetailsScreen}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

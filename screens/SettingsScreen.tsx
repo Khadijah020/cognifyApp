@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -134,6 +135,7 @@ interface CaregiverInfo {
   full_name: string;
   email: string;
   phone: string;
+  avatar_uri?: string | null;
 }
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
@@ -190,7 +192,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
       const { data, error } = await supabase
         .from('caregivers')
-        .select('full_name, email, phone')
+        .select('*')
         .eq('id', user.id)
         .single();
 
@@ -203,6 +205,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         full_name: data.full_name || '',
         email: data.email || '',
         phone: data.phone || '',
+        avatar_uri: data.avatar_uri || null,
       });
     } catch (err) {
       console.error('Unexpected error fetching caregiver:', err);
@@ -302,16 +305,20 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       >
         <View style={[styles.profileCard, dynamicStyles.card]} onTouchEnd={() => navigation.navigate('EditCaregiverProfile')}>
           <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>
-              {caregiver?.full_name
-                ? caregiver.full_name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)
-                : 'NA'}
-            </Text>
+            {caregiver?.avatar_uri ? (
+              <Image source={{ uri: caregiver.avatar_uri }} style={styles.profileAvatarImage} />
+            ) : (
+              <Text style={styles.profileAvatarText}>
+                {caregiver?.full_name
+                  ? caregiver.full_name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)
+                  : 'NA'}
+              </Text>
+            )}
           </View>
           <View style={{ marginLeft: 14, flex: 1 }}>
             <Text style={[styles.profileName, dynamicStyles.text]}>{caregiver?.full_name || 'Loading...'}</Text>
@@ -489,6 +496,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   profileAvatarText: {
     fontFamily: 'Poppins_600SemiBold',

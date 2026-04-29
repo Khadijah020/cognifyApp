@@ -49,6 +49,7 @@ import FallAlertListener from "../services/FallAlertListener";
 import HealthDataService from "../services/HealthDataService";
 import MedicationAdherenceService from "../services/MedicationAdherenceService";
 import PatientActivityService, { PatientActivity } from "../services/PatientActivityService";
+import PatientDeviceStatusService from "../services/PatientDeviceStatusService";
 import ReminderHelperService from "../services/ReminderHelperService";
 import { supabase } from "../src/lib/supabase";
 
@@ -56,6 +57,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "CaregiverDashboard">;
 
 const W = Dimensions.get("window").width;
 const FALL_ALERT_COOLDOWN_MS = 2 * 60 * 1000;
+const PATIENT_ONLINE_THRESHOLD_MS = 2.5 * 60 * 1000;
 
 type FallAlertData = {
   id?: string;
@@ -143,7 +145,10 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>("Loading...");
   const [caregiverName, setCaregiverName] = useState<string>("Caregiver");
+  const [caregiverAvatarUri, setCaregiverAvatarUri] = useState<string | null>(null);
   const [patientPhone, setPatientPhone] = useState<string | null>(null);
+  const [patientBatteryLevel, setPatientBatteryLevel] = useState<number | null>(null);
+  const [patientIsOnline, setPatientIsOnline] = useState(false);
   const [alert, setAlert] = useState<FallAlertData | null>(null);
   const shownFallAlertsRef = useRef<Map<string, number>>(new Map());
   
@@ -154,8 +159,8 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   const [loadingReminders, setLoadingReminders] = useState(true);
 
   /* -------------------- Health data state -------------------- */
-  const [steps, setSteps] = useState(4280);
-  const [activeMinutes, setActiveMinutes] = useState(62);
+  const [steps, setSteps] = useState(0);
+  const [activeMinutes, setActiveMinutes] = useState(0);
   
   /* ✅ Medication adherence data */
   const [medicationAdherence, setMedicationAdherence] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
@@ -192,13 +197,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
         // Fetch caregiver name
         const { data: cgData } = await supabase
           .from('caregivers')
-          .select('full_name')
+          .select('*')
           .eq('id', id)
           .single();
         
         if (cgData?.full_name) {
           setCaregiverName(cgData.full_name.split(' ')[0] || 'Caregiver');
         }
+        setCaregiverAvatarUri(cgData?.avatar_uri || null);
         
         const patient = await CaregiverService.getPrimaryPatient(id);
         if (patient) {
@@ -480,6 +486,28 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     }
   };
 
+  const refreshCaregiverProfile = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('caregivers')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error refreshing caregiver profile:', error);
+        return;
+      }
+
+      if (data?.full_name) {
+        setCaregiverName(data.full_name.split(' ')[0] || 'Caregiver');
+      }
+      setCaregiverAvatarUri(data?.avatar_uri || null);
+    } catch (error) {
+      console.error('Unexpected error refreshing caregiver profile:', error);
+    }
+  };
+
   const handleCallPatient = async () => {
     try {
       if (patientPhone) {
@@ -521,6 +549,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
     const unsubscribe = navigation.addListener('focus', () => {
       if (caregiverId) {
         console.log('📍 Dashboard focused - refreshing reminders...');
+        refreshCaregiverProfile(caregiverId);
         loadUpcomingReminders();
         if (patientId) {
           loadMedicationAdherence();
@@ -534,15 +563,64 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
   }, [navigation, caregiverId, patientId]);
 
   const loadHealthData = async () => {
+    if (!patientId) {
+      setSteps(0);
+      setActiveMinutes(0);
+      return;
+    }
+
     try {
-      const stepCount = await HealthDataService.getStepCount();
-      const minutes = await HealthDataService.getActiveMinutes();
-      setSteps(stepCount);
-      setActiveMinutes(minutes);
+      const healthData = await HealthDataService.getPatientDailyHealthData(patientId);
+      setSteps(healthData?.steps ?? 0);
+      setActiveMinutes(healthData?.activeMinutes ?? 0);
     } catch (error) {
       console.log('Error loading health data:', error);
     }
   };
+
+  useEffect(() => {
+    if (!patientId) {
+      setSteps(0);
+      setActiveMinutes(0);
+      return;
+    }
+
+    loadHealthData();
+    const interval = setInterval(loadHealthData, 30000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  const loadPatientDeviceStatus = async () => {
+    if (!patientId) {
+      setPatientBatteryLevel(null);
+      setPatientIsOnline(false);
+      return;
+    }
+
+    try {
+      const status = await PatientDeviceStatusService.getPatientDeviceStatus(patientId);
+      setPatientBatteryLevel(status?.batteryLevel ?? null);
+      const lastHeartbeat = status?.recordedAt ? new Date(status.recordedAt).getTime() : 0;
+      setPatientIsOnline(lastHeartbeat > 0 && Date.now() - lastHeartbeat <= PATIENT_ONLINE_THRESHOLD_MS);
+    } catch (error) {
+      console.log('Error loading patient device status:', error);
+      setPatientIsOnline(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!patientId) {
+      setPatientBatteryLevel(null);
+      setPatientIsOnline(false);
+      return;
+    }
+
+    loadPatientDeviceStatus();
+    const interval = setInterval(loadPatientDeviceStatus, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
 
   // ✅ Load reminders + Real-time subscription
   useEffect(() => {
@@ -705,16 +783,20 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
               </View>
               <View style={styles.row}>
                 <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {caregiverName
-                      ? caregiverName
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()
-                          .slice(0, 2)
-                      : 'C'}
-                  </Text>
+                  {caregiverAvatarUri ? (
+                    <Image source={{ uri: caregiverAvatarUri }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {caregiverName
+                        ? caregiverName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .toUpperCase()
+                            .slice(0, 2)
+                        : 'C'}
+                    </Text>
+                  )}
                 </View>
                 <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDark ? '#1e1e36' : '#fff' }]}
                 onPress={() => navigation.navigate('Settings')}>
@@ -737,12 +819,14 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.row}>
                   <View style={styles.rowIcon}>
-                    <Feather name="wifi" size={16} color="#fff" />
-                    <Text style={styles.smallWhite}>Online</Text>
+                    <Feather name={patientIsOnline ? "wifi" : "wifi-off"} size={16} color="#fff" />
+                    <Text style={styles.smallWhite}>{patientIsOnline ? 'Online' : 'Offline'}</Text>
                   </View>
                   <View style={[styles.rowIcon, { marginLeft: 12 }]}>
                     <MaterialIcons name="battery-std" size={16} color="#fff" />
-                    <Text style={styles.smallWhite}>92%</Text>
+                    <Text style={styles.smallWhite}>
+                      {patientBatteryLevel === null ? '--' : `${patientBatteryLevel}%`}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -751,7 +835,7 @@ export default function CaregiverDashboardScreen({ navigation }: Props) {
                 <GhostBtn 
                 icon="pin-drop" 
                 text="  Check Location"
-                onPress={() => navigation.navigate('PatientLocation', { patientName })}  />  
+                onPress={() => navigation.navigate('PatientLocation', { patientName, patientId: patientId || undefined })}  />  
               </View>
             </LinearGradient>
           </View>
@@ -1704,7 +1788,8 @@ const styles = StyleSheet.create({
   smallWhite: { fontSize: 12, fontFamily: "Poppins_400Regular", color: "#fff" },
   smallMuted: { fontSize: 14, fontFamily: "Poppins_400Regular", color: "#64748b", marginTop: -4 },
 
-  avatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: "#a5b4fc", marginRight: 12, marginBottom: 10, backgroundColor: "#8486f0ff", alignItems: "center", justifyContent: "center" },
+  avatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: "#a5b4fc", marginRight: 12, marginBottom: 10, backgroundColor: "#8486f0ff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatarImage: { width: "100%", height: "100%" },
   avatarText: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: "#fff" },
   iconBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: 10 },
 

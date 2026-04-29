@@ -19,6 +19,7 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { RootStackParamList } from '../app/App';
 import { useTheme } from '../contexts/ThemeContext';
 import * as CaregiverService from '../services/CaregiverService';
+import PatientDeviceStatusService from '../services/PatientDeviceStatusService';
 
 import {
     Poppins_400Regular,
@@ -77,6 +78,7 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
   );
   const hasAlertLocation = !!alertCoordinates;
   const fromAlert = route.params?.fromAlert === true;
+  const routePatientId = route.params?.patientId;
   const routePatientName = route.params?.patientName;
   const initialTimestamp = useRef(route.params?.timestamp ? new Date(route.params.timestamp) : new Date()).current;
   const [lastLocationUpdate, setLastLocationUpdate] = useState<Date>(initialTimestamp);
@@ -145,6 +147,61 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const loadSyncedPatientLocation = async () => {
+      if (!routePatientId) return;
+
+      const status = await PatientDeviceStatusService.getPatientDeviceStatus(routePatientId);
+      const hasSyncedLocation =
+        typeof status?.latitude === 'number' && typeof status?.longitude === 'number';
+
+      if (!hasSyncedLocation) {
+        setPatientInfo((prev) => ({
+          ...prev,
+          name: routePatientName || prev.name,
+          address: 'No synced patient location yet. Open the patient app and allow location access.',
+        }));
+        setMapRegion(null);
+        return;
+      }
+
+      const coordinates = {
+        latitude: status.latitude as number,
+        longitude: status.longitude as number,
+      };
+      const locationDate = status.locationRecordedAt
+        ? new Date(status.locationRecordedAt)
+        : status.recordedAt
+          ? new Date(status.recordedAt)
+          : new Date();
+
+      let formattedAddress = 'Patient synced location';
+      try {
+        const [addr] = await Location.reverseGeocodeAsync(coordinates);
+        formattedAddress = addr
+          ? `${addr.street || 'Near'} ${addr.name || ''}, ${addr.city || ''}, ${addr.region || ''}`.replace(/\s+/g, ' ').trim()
+          : formattedAddress;
+      } catch (e) {
+        console.log('Reverse geocode error', e);
+      }
+
+      setLastLocationUpdate(locationDate);
+      setPatientInfo((prev) => ({
+        ...prev,
+        name: routePatientName || prev.name,
+        lastUpdated: getTimeAgo(locationDate),
+        address: formattedAddress,
+        coordinates,
+      }));
+
+      const region = {
+        ...coordinates,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      };
+      setMapRegion(region);
+    };
 
     (async () => {
       if (alertCoordinates) {
@@ -184,6 +241,12 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
           address: 'This fall alert did not include GPS coordinates.',
         }));
         setMapRegion(null);
+        return;
+      }
+
+      if (routePatientId) {
+        await loadSyncedPatientLocation();
+        interval = setInterval(loadSyncedPatientLocation, 60 * 1000);
         return;
       }
 
@@ -241,8 +304,11 @@ export default function PatientLocationScreen({ navigation, route }: Props) {
       );
     })();
 
-    return () => sub?.remove();
-  }, [alertCoordinates, fromAlert, initialTimestamp, route.params?.timestamp, routePatientName]);
+    return () => {
+      sub?.remove();
+      if (interval) clearInterval(interval);
+    };
+  }, [alertCoordinates, fromAlert, initialTimestamp, route.params?.timestamp, routePatientId, routePatientName]);
 
   const openExternalDirections = () => {
     const { latitude, longitude } = patientInfo.coordinates;

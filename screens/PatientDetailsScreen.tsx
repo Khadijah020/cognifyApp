@@ -6,7 +6,7 @@ import {
     Poppins_700Bold,
     useFonts,
 } from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
@@ -170,7 +170,7 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   const safe = (v?: string) => (v && String(v).trim().length ? String(v) : '—');
-  const gradientColors = isDark ? ['#0f0f1a', '#1a1a2e'] : [COLORS.bgFrom, COLORS.bgTo];
+  const gradientColors: [string, string] = isDark ? ['#0f0f1a', '#1a1a2e'] : [COLORS.bgFrom, COLORS.bgTo];
 
   return (
     <View style={styles.root}>
@@ -179,10 +179,10 @@ const PatientDetailsScreen: React.FC<Props> = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDark ? '#1e1e36' : COLORS.white }]} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back-ios-new" size={20} color={isDark ? '#9ca3af' : COLORS.slate600} />
+          <Ionicons name="arrow-back" size={24} color={isDark ? '#9ca3af' : COLORS.slate600} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: isDark ? '#e5e7eb' : COLORS.slate800 }]}>Patient Details</Text>
-        <View style={{ width: 32 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -345,7 +345,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backBtn: { padding: 6 },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 24,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   headerTitle: {
     fontSize: 22,
     color: COLORS.slate800,

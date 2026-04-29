@@ -377,11 +377,14 @@ const AddReminderScreen = ({ navigation, route }: Props) => {
     <View style={dynamicStyles.container}>
       {/* HEADER */}
       <View style={dynamicStyles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color={isDark ? '#9ca3af' : SLATE_800} />
-          <Text style={[styles.backText, dynamicStyles.text]}>Back</Text>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { backgroundColor: isDark ? '#1e1e36' : '#ffffff' }]}
+        >
+          <Ionicons name="arrow-back" size={24} color={isDark ? '#9ca3af' : SLATE_600} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, dynamicStyles.text]}>{isEditing ? 'Edit Reminder' : 'Add Reminder'}</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -659,14 +662,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
     paddingBottom: 16,
     backgroundColor: '#e8e9f3',
   },
   backButton: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   backText: {
     fontFamily: 'Poppins_500Medium',
@@ -676,9 +689,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: 'Poppins_700Bold',
-    fontSize: 20,
+    fontSize: 22,
     color: SLATE_800,
-    marginLeft: 16,
   },
   scrollContainer: {
     padding: 16,
@@ -934,11 +946,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dropdownItemText: {
-    fontFamily: 'Poppins_500Medium',
-    fontSize: 15,
-  },
-  inputText: {
-    flex: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 15,
   },

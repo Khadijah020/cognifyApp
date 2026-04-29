@@ -30,6 +30,9 @@ import { supabase } from '../src/lib/supabase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditCaregiverProfile'>;
 
+const DEFAULT_AVATAR_URI =
+  'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
+
 export default function EditCaregiverProfileScreen({ navigation }: Props) {
   const { colors, isDark } = useTheme();
   const [fontsLoaded] = useFonts({
@@ -46,9 +49,7 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | null>(
-    'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100'
-  );
+  const [avatarUri, setAvatarUri] = useState<string | null>(DEFAULT_AVATAR_URI);
 
   useEffect(() => {
     (async () => {
@@ -78,6 +79,7 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
         setFullName(data.full_name || '');
         setEmail(data.email || '');
         setPhone(data.phone || '');
+        setAvatarUri(data.avatar_uri || DEFAULT_AVATAR_URI);
         setLoading(false);
       } catch (err) {
         console.error('Unexpected error:', err);
@@ -102,7 +104,58 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
     });
 
     if (!res.canceled) {
-      Alert.alert('Image Selected', 'Preview not saved since avatar field is disabled.');
+      const uri = res.assets[0].uri;
+      await uploadAvatar(uri);
+    }
+  };
+
+  const uploadAvatar = async (uri: string) => {
+    if (!caregiverId) {
+      Alert.alert('Error', 'Unable to determine user ID.');
+      return;
+    }
+
+    const previousAvatarUri = avatarUri;
+    setAvatarUri(uri);
+    setSaving(true);
+
+    try {
+      const filePath = `${caregiverId}/avatar_${Date.now()}.jpg`;
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: 'avatar.jpg',
+        type: 'image/jpeg',
+      } as any);
+
+      const { error: uploadError } = await supabase.storage
+        .from('caregiver_avatars')
+        .upload(filePath, formData);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('caregiver_avatars')
+        .getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from('caregivers')
+        .update({ avatar_uri: urlData.publicUrl })
+        .eq('id', caregiverId);
+
+      if (updateError) throw updateError;
+
+      setAvatarUri(urlData.publicUrl);
+      Alert.alert('Avatar Updated', 'Your profile picture has been saved.');
+    } catch (err: any) {
+      console.error('Caregiver avatar upload error:', err);
+      setAvatarUri(previousAvatarUri);
+      Alert.alert(
+        'Upload failed',
+        err?.message || 'Could not upload avatar. Check that the caregiver_avatars bucket and caregivers.avatar_uri column exist.'
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -191,7 +244,7 @@ export default function EditCaregiverProfileScreen({ navigation }: Props) {
                   source={{
                     uri:
                       avatarUri ??
-                      'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100',
+                      DEFAULT_AVATAR_URI,
                   }}
                   style={S.avatar}
                 />

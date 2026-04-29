@@ -1,7 +1,5 @@
 // contexts/ThemeContext.tsx
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Appearance } from 'react-native';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 
 export type ThemeColors = {
   background: string;
@@ -60,8 +58,6 @@ const DARK: ThemeColors = {
   divider: '#2d2d44',
 };
 
-const THEME_KEY = 'app_theme'; // 'light' | 'dark'
-
 const ThemeContext = createContext<ThemeContextValue>({
   colors: LIGHT,
   isDark: false,
@@ -69,24 +65,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const system = Appearance.getColorScheme();
-  const [isDark, setIsDark] = useState<boolean>(system === 'dark');
-
-  // Load persisted preference
-  useEffect(() => {
-    (async () => {
-      try {
-        const saved = await AsyncStorage.getItem(THEME_KEY);
-        if (saved === 'light') setIsDark(false);
-        if (saved === 'dark') setIsDark(true);
-      } catch {}
-    })();
-  }, []);
-
-  // Persist on change
-  useEffect(() => {
-    AsyncStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light').catch(() => {});
-  }, [isDark]);
+  const [isDark, setIsDark] = useState<boolean>(false);
 
   const toggleTheme = () => setIsDark((v) => !v);
 

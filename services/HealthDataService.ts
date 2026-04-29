@@ -1,7 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pedometer } from 'expo-sensors';
+import { supabase } from '../src/lib/supabase';
 
 const MOCK_HEALTH_DATA_KEY = '@cognify_mock_health_data';
+
+export type DailyHealthData = {
+  steps: number;
+  activeMinutes: number;
+  date: string;
+  recordedAt?: string;
+};
 
 class HealthDataService {
   private pedometerAvailable = false;
@@ -44,13 +52,24 @@ class HealthDataService {
       if (this.pedometerAvailable) {
         return await this.getPedometerStepCount();
       } else {
-        console.log('Pedometer not available, using mock data');
-        return await this.getMockStepCount();
+        console.log('Pedometer not available, using cached data');
+        return (await this.getCachedRealStepCount()) ?? 0;
       }
     } catch (error) {
       console.log('Error getting steps from device APIs:', error);
-      return await this.getMockStepCount();
+      return (await this.getCachedRealStepCount()) ?? 0;
     }
+  }
+
+  async getTodayHealthData(): Promise<DailyHealthData> {
+    const steps = await this.getStepCount();
+
+    return {
+      steps,
+      activeMinutes: this.estimateActiveMinutes(steps),
+      date: this.getLocalDateKey(),
+      recordedAt: new Date().toISOString(),
+    };
   }
 
   private async getPedometerStepCount(): Promise<number> {
@@ -70,25 +89,19 @@ class HealthDataService {
       console.log('Error getting steps from Pedometer, trying cached data:', error);
       // Try to get last cached real step count
       const cachedSteps = await this.getCachedRealStepCount();
-      return cachedSteps || this.generateMockSteps();
+      return cachedSteps ?? 0;
     }
   }
 
   async getActiveMinutes(): Promise<number> {
     try {
-      await this.checkPedometerAvailability();
-      
-      if (this.pedometerAvailable) {
-        const steps = await this.getPedometerStepCount();
-        const estimatedMinutes = Math.max(30, Math.min(120, Math.round(steps / 100)));
-        console.log('Estimated active minutes from steps:', estimatedMinutes);
-        return estimatedMinutes;
-      } else {
-        return await this.getMockActiveMinutes();
-      }
+      const steps = await this.getStepCount();
+      const estimatedMinutes = this.estimateActiveMinutes(steps);
+      console.log('Estimated active minutes from steps:', estimatedMinutes);
+      return estimatedMinutes;
     } catch (error) {
       console.log('Error getting active minutes:', error);
-      return await this.getMockActiveMinutes();
+      return 0;
     }
   }
 
@@ -126,6 +139,93 @@ class HealthDataService {
 
   private generateMockActiveMinutes(): number {
     return Math.floor(30 + Math.random() * 90);
+  }
+
+  private estimateActiveMinutes(steps: number): number {
+    if (steps <= 0) return 0;
+    return Math.max(1, Math.min(120, Math.round(steps / 100)));
+  }
+
+  private getLocalDateKey(date = new Date()): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  async syncPatientDailyHealthData(patientId: string, healthData: DailyHealthData): Promise<void> {
+    try {
+      const { data: existing, error: selectError } = await supabase
+        .from('activity_metrics')
+        .select('id')
+        .eq('patient_id', patientId)
+        .eq('day', healthData.date)
+        .order('inserted_at', { ascending: false })
+        .limit(1);
+
+      if (selectError) {
+        console.warn('Unable to check existing patient activity metrics:', selectError.message);
+        return;
+      }
+
+      const payload = {
+        patient_id: patientId,
+        day: healthData.date,
+        steps: healthData.steps,
+        active_minutes: healthData.activeMinutes,
+        inserted_at: healthData.recordedAt || new Date().toISOString(),
+      };
+
+      if (existing?.[0]?.id) {
+        const { error } = await supabase
+          .from('activity_metrics')
+          .update(payload)
+          .eq('id', existing[0].id);
+
+        if (error) {
+          console.warn('Unable to update patient activity metrics:', error.message);
+        }
+        return;
+      }
+
+      const { error } = await supabase.from('activity_metrics').insert(payload);
+      if (error) {
+        console.warn('Unable to insert patient activity metrics:', error.message);
+      }
+    } catch (error) {
+      console.warn('Unexpected error syncing patient health data:', error);
+    }
+  }
+
+  async getPatientDailyHealthData(patientId: string): Promise<DailyHealthData | null> {
+    try {
+      const today = this.getLocalDateKey();
+      const { data, error } = await supabase
+        .from('activity_metrics')
+        .select('steps, active_minutes, day, inserted_at')
+        .eq('patient_id', patientId)
+        .eq('day', today)
+        .order('inserted_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.warn('Unable to load patient health data:', error.message);
+        return null;
+      }
+
+      const row = data?.[0];
+      if (!row) return null;
+
+      return {
+        steps: Number(row.steps) || 0,
+        activeMinutes: Number(row.active_minutes) || 0,
+        date: String(row.day),
+        recordedAt: row.inserted_at || undefined,
+      };
+    } catch (error) {
+      console.warn('Unexpected error loading patient health data:', error);
+      return null;
+    }
   }
 
   async isHealthDataAvailable(): Promise<{ steps: boolean; activeMinutes: boolean }> {

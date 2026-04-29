@@ -31,6 +31,7 @@ import FallDetectionService from "../services/FallDetectionService";
 import HealthDataService from '../services/HealthDataService';
 
 import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
+import PatientDeviceStatusService from '../services/PatientDeviceStatusService';
 import { getAuthenticatedPatientProfile } from '../services/PatientService';
 import ReminderHelperService from '../services/ReminderHelperService';
 import { supabase } from '../src/lib/supabase';
@@ -476,14 +477,37 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     loadHealthData();
     const interval = setInterval(loadHealthData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!patientId) return;
+
+    loadDeviceStatus();
+    const interval = setInterval(loadDeviceStatus, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  const loadDeviceStatus = async () => {
+    if (!patientId) return;
+
+    try {
+      const status = await PatientDeviceStatusService.collectDeviceStatus();
+      await PatientDeviceStatusService.syncPatientDeviceStatus(patientId, status);
+    } catch (error) {
+      console.log('Error syncing patient device status:', error);
+    }
+  };
 
   const loadHealthData = async () => {
     try {
-      const stepCount = await HealthDataService.getStepCount();
-      const minutes = await HealthDataService.getActiveMinutes();
-      setSteps(stepCount);
-      setActiveMinutes(minutes);
+      const healthData = await HealthDataService.getTodayHealthData();
+      setSteps(healthData.steps);
+      setActiveMinutes(healthData.activeMinutes);
+
+      if (patientId) {
+        await HealthDataService.syncPatientDailyHealthData(patientId, healthData);
+      }
     } catch (error) {
       console.log('Error loading health data:', error);
     }
