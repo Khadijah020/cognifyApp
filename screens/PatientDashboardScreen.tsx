@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import * as ImagePicker from "expo-image-picker";
 import * as Speech from "expo-speech";
 
 import { MaterialIcons } from "@expo/vector-icons";
@@ -188,6 +189,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNoteText, setNewNoteText] = useState("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadResult, setVideoUploadResult] = useState<string | null>(null);
 
   // Modal animation
   const translateY = useRef(new Animated.Value(0)).current;
@@ -701,6 +704,36 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       console.error("❌ Failed to load reminders:", error);
     } finally {
       setLoadingReminders(false);
+    }
+  };
+
+  const handleVideoUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission required", "Please allow access to your media library to upload a video.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+    const videoUri = result.assets[0].uri;
+    setIsUploadingVideo(true);
+    setVideoUploadResult(null);
+
+    try {
+      const response = await ApiService.sendVideoForStepVerification(videoUri);
+      const message = response?.reminder || response?.message || "Video processed successfully.";
+      setVideoUploadResult(message);
+    } catch (error) {
+      setVideoUploadResult("Failed to process video. Please check the backend URL and try again.");
+    } finally {
+      setIsUploadingVideo(false);
     }
   };
 
@@ -1379,6 +1412,81 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               </Text>
             </View>
           )}
+        </View>
+
+        {/* Test Contextual Reminders */}
+        <View
+          style={{
+            flexDirection: "row",
+            marginTop: 26,
+            marginBottom: 12,
+            paddingLeft: 27,
+          }}
+        >
+          <Text style={styles.sectionTitle2}>Test Contextual Reminders</Text>
+        </View>
+        <View style={{ paddingHorizontal: 24 }}>
+          <View style={styles.card}>
+            <Text
+              style={{
+                fontFamily: "Poppins_400Regular",
+                fontSize: 13,
+                color: C.slate500,
+                marginBottom: 14,
+              }}
+            >
+              Upload a short video clip to test the contextual reminder system. The video will be analysed by the backend and a relevant reminder will be returned.
+            </Text>
+            <TouchableOpacity
+              onPress={handleVideoUpload}
+              disabled={isUploadingVideo}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: isUploadingVideo ? C.indigo300 : C.indigo500,
+                borderRadius: 14,
+                paddingVertical: 13,
+                paddingHorizontal: 20,
+                gap: 8,
+              }}
+            >
+              {isUploadingVideo ? (
+                <ActivityIndicator size="small" color={C.white} />
+              ) : (
+                <MaterialIcons name="upload-file" size={20} color={C.white} />
+              )}
+              <Text
+                style={{
+                  fontFamily: "Poppins_600SemiBold",
+                  fontSize: 15,
+                  color: C.white,
+                }}
+              >
+                {isUploadingVideo ? "Processing..." : "Upload Video"}
+              </Text>
+            </TouchableOpacity>
+            {videoUploadResult !== null && (
+              <View
+                style={{
+                  marginTop: 14,
+                  backgroundColor: "#eef2ff",
+                  borderRadius: 12,
+                  padding: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: "Poppins_500Medium",
+                    fontSize: 13,
+                    color: C.indigo500,
+                  }}
+                >
+                  {videoUploadResult}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Daily Activity */}

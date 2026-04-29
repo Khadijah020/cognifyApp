@@ -1,9 +1,8 @@
-const NGROK_BASE_URL = 'https://0e89-34-125-209-37.ngrok-free.app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend notebook ngrok URL - can be overridden by user in settings.
 // The backend notebook itself calls the vision notebook through VISION_SERVICE_URL.
-const DEFAULT_NGROK_URL = 'https://a6f7-34-87-99-247.ngrok-free.app';
+const DEFAULT_NGROK_URL = 'https://5824-136-110-17-115.ngrok-free.app';
 const NGROK_URL_STORAGE_KEY = 'cognify_ngrok_url';
 const STALE_NGROK_URLS = new Set([
   'https://a740dc4389a4.ngrok-free.app',
