@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend notebook ngrok URL - can be overridden by user in settings.
 // The backend notebook itself calls the vision notebook through VISION_SERVICE_URL.
-const DEFAULT_NGROK_URL = 'https://1053-34-83-34-119.ngrok-free.app';
+const DEFAULT_NGROK_URL = 'https://33d8-34-50-168-11.ngrok-free.app';
 const NGROK_URL_STORAGE_KEY = 'cognify_ngrok_url';
 const STALE_NGROK_URLS = new Set([
   'https://a740dc4389a4.ngrok-free.app',
@@ -343,6 +343,48 @@ export class ApiService {
       }
     } catch (error) {
       console.log('Sensor fall candidate was not sent to backend:', error);
+    }
+  }
+
+  /**
+   * Upload a video for step verification — simulates the camera stream sending a frame
+   * to the backend so it can confirm step completion and trigger the next step.
+   * Backend endpoint: POST /process_video
+   */
+  static async sendVideoForStepVerification(videoUri: string): Promise<any> {
+    try {
+      const endpoint = this.getApiEndpoint('/process_video');
+
+      console.log('🎥 Sending video for step verification to:', endpoint);
+
+      const formData = new FormData();
+      formData.append('video', {
+        uri: videoUri,
+        type: 'video/mp4',
+        name: 'step_verification.mp4',
+      } as any);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Video upload error:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Video verification response:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error sending video for step verification:', error);
+      throw error;
     }
   }
 
