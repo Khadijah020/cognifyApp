@@ -14,6 +14,7 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
+    FlatList,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -21,14 +22,15 @@ import {
     Modal,
     PanResponder,
     Platform,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-
     View,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { RootStackParamList } from '../app/App';
 import { ApiService } from '../services/ApiService';
 import FallDetectionService from "../services/FallDetectionService";
@@ -176,6 +178,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNoteText, setNewNoteText] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isStoppingRef = useRef(false);
 
   // Modal animation
   const translateY = useRef(new Animated.Value(0)).current;
@@ -356,6 +362,94 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       + ' · '
       + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const M4A_OPTIONS: Audio.RecordingOptions = {
+    isMeteringEnabled: false,
+    android: {
+      extension: '.m4a',
+      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+      audioEncoder: Audio.AndroidAudioEncoder.AAC,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 64000,
+    },
+    ios: {
+      extension: '.m4a',
+      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+      audioQuality: Audio.IOSAudioQuality.MEDIUM,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 64000,
+      linearPCMBitDepth: 16,
+      linearPCMIsBigEndian: false,
+      linearPCMIsFloat: false,
+    },
+    web: {},
+  };
+
+  const processChunk = async (uri: string) => {
+    try {
+      const result = await ApiService.sendAudioForSTT(uri);
+      if (result.transcript?.trim()) {
+        setNewNoteText(prev => {
+          const t = prev.trim();
+          return t ? `${t} ${result.transcript.trim()}` : result.transcript.trim();
+        });
+      }
+    } catch (err) {
+      console.log('STT chunk error:', err);
+    }
+  };
+
+  const recordChunk = async () => {
+    if (isStoppingRef.current) return;
+    if (recordingRef.current) {
+      const prev = recordingRef.current;
+      recordingRef.current = null;
+      try {
+        await prev.stopAndUnloadAsync();
+        const uri = prev.getURI();
+        if (uri) processChunk(uri);
+      } catch (_) {}
+    }
+    if (isStoppingRef.current) return;
+    try {
+      const { recording } = await Audio.Recording.createAsync(M4A_OPTIONS);
+      recordingRef.current = recording;
+    } catch (err) {
+      console.log('Recording start error:', err);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    const { granted } = await Audio.requestPermissionsAsync();
+    if (!granted) {
+      Alert.alert('Permission needed', 'Microphone access is required to use voice notes.');
+      return;
+    }
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+    isStoppingRef.current = false;
+    setIsRecording(true);
+    await recordChunk();
+    chunkTimerRef.current = setInterval(recordChunk, 4000);
+  };
+
+  const stopVoiceRecording = async () => {
+    isStoppingRef.current = true;
+    setIsRecording(false);
+    if (chunkTimerRef.current) {
+      clearInterval(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+        const uri = recordingRef.current.getURI();
+        recordingRef.current = null;
+        if (uri) await processChunk(uri);
+      } catch (_) {}
+    }
   };
 
   // ✅ Animate face popup in
@@ -1391,95 +1485,106 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         onClose={hideFaceRecognitionPopup}
       />
 
-      {/* Notes Modal */}
+      {/* Notes Modal — full-screen slide-up so FlatList gets a real flex:1 height */}
       <Modal
         visible={showNotesModal}
-        transparent
         animationType="slide"
         onRequestClose={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
       >
-        <View style={notesStyles.overlay}>
-          {/* Tappable backdrop closes the modal */}
-          <TouchableOpacity
-            style={notesStyles.backdrop}
-            activeOpacity={1}
-            onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+        <SafeAreaView style={notesStyles.screen}>
+          {/* Header */}
+          <View style={notesStyles.headerRow}>
+            <TouchableOpacity
+              onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="arrow-back" size={24} color={C.slate700} />
+            </TouchableOpacity>
+            <View style={notesStyles.headerCenter}>
+              <MaterialIcons name="edit-note" size={22} color={C.indigo500} />
+              <Text style={notesStyles.title}>My Notes</Text>
+            </View>
+            <View style={{ width: 24 }} />
+          </View>
+
+          {/* Notes list — flex:1 fills all space between header and input bar */}
+          <FlatList
+            data={notes}
+            keyExtractor={item => item.id}
+            contentContainerStyle={notesStyles.listContent}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={notesStyles.emptyState}>
+                <MaterialIcons name="notes" size={56} color={C.slate300} />
+                <Text style={notesStyles.emptyText}>No notes yet</Text>
+                <Text style={notesStyles.emptySubText}>Use the input below to add your first note</Text>
+              </View>
+            }
+            renderItem={({ item: note }) => (
+              <View style={notesStyles.noteCard}>
+                <Text style={notesStyles.noteText}>{note.text}</Text>
+                <View style={notesStyles.noteFooter}>
+                  <Text style={notesStyles.noteDate}>{formatNoteDate(note.createdAt)}</Text>
+                  <TouchableOpacity
+                    onPress={() => deleteNote(note.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="delete-outline" size={18} color={C.slate400} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           />
 
-          {/* KeyboardAvoidingView wraps only the sheet so it lifts with the keyboard */}
+          {/* Input bar pinned to the bottom */}
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <View style={notesStyles.sheet}>
-              {/* Header */}
-              <View style={notesStyles.headerRow}>
-                <View style={notesStyles.headerLeft}>
-                  <MaterialIcons name="edit-note" size={26} color={C.indigo500} />
-                  <Text style={notesStyles.title}>My Notes</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialIcons name="close" size={24} color={C.slate500} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Input area */}
-              <View style={notesStyles.inputRow}>
-                <TextInput
-                  style={notesStyles.input}
-                  placeholder="Write a note..."
-                  placeholderTextColor={C.slate400}
-                  value={newNoteText}
-                  onChangeText={setNewNoteText}
-                  multiline
-                  maxLength={500}
-                />
-                <TouchableOpacity
-                  style={[notesStyles.saveBtn, !newNoteText.trim() && notesStyles.saveBtnDisabled]}
-                  onPress={saveNote}
-                  disabled={!newNoteText.trim()}
-                  activeOpacity={0.8}
-                >
-                  <MaterialIcons name="send" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Notes list — explicit maxHeight so ScrollView gets real space */}
-              <ScrollView
-                style={notesStyles.list}
-                contentContainerStyle={notesStyles.listContent}
-                keyboardDismissMode="on-drag"
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
+            <View style={notesStyles.inputBar}>
+              {/* Mic button */}
+              <TouchableOpacity
+                style={[notesStyles.micBtn, isRecording && notesStyles.micBtnActive]}
+                onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+                activeOpacity={0.8}
               >
-                {notes.length === 0 ? (
-                  <View style={notesStyles.emptyState}>
-                    <MaterialIcons name="notes" size={48} color={C.slate300} />
-                    <Text style={notesStyles.emptyText}>No notes yet</Text>
-                    <Text style={notesStyles.emptySubText}>Your notes will appear here</Text>
-                  </View>
-                ) : (
-                  notes.map(note => (
-                    <View key={note.id} style={notesStyles.noteCard}>
-                      <Text style={notesStyles.noteText}>{note.text}</Text>
-                      <View style={notesStyles.noteFooter}>
-                        <Text style={notesStyles.noteDate}>{formatNoteDate(note.createdAt)}</Text>
-                        <TouchableOpacity
-                          onPress={() => deleteNote(note.id)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <MaterialIcons name="delete-outline" size={18} color={C.slate400} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))
-                )}
-              </ScrollView>
+                <MaterialIcons
+                  name={isRecording ? 'stop' : 'mic'}
+                  size={22}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+
+              <TextInput
+                style={notesStyles.input}
+                placeholder="Write or speak a note…"
+                placeholderTextColor={C.slate400}
+                value={newNoteText}
+                onChangeText={setNewNoteText}
+                multiline
+                maxLength={500}
+              />
+
+              {/* Send button */}
+              <TouchableOpacity
+                style={[notesStyles.saveBtn, !newNoteText.trim() && notesStyles.saveBtnDisabled]}
+                onPress={saveNote}
+                disabled={!newNoteText.trim()}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
+
+            {isRecording && (
+              <View style={notesStyles.recordingBanner}>
+                <View style={notesStyles.recordingDot} />
+                <Text style={notesStyles.recordingText}>Recording… text appears every few seconds</Text>
+              </View>
+            )}
           </KeyboardAvoidingView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Reminder Details Modal */}
@@ -2395,34 +2500,21 @@ const modalStyles = StyleSheet.create({
 });
 
 const notesStyles = StyleSheet.create({
-  overlay: {
+  screen: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 10,
+    backgroundColor: '#f8fafc',
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  headerLeft: {
+  headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -2432,20 +2524,90 @@ const notesStyles = StyleSheet.create({
     fontSize: 20,
     color: C.slate800,
   },
-  inputRow: {
+  listContent: {
+    padding: 16,
+    paddingBottom: 8,
+    flexGrow: 1,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 80,
+  },
+  emptyText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 16,
+    color: C.slate500,
+    marginTop: 16,
+  },
+  emptySubText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    color: C.slate400,
+    marginTop: 6,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  noteCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: C.indigo500,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  noteText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 15,
+    color: C.slate700,
+    lineHeight: 22,
+  },
+  noteFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  noteDate: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 11,
+    color: C.slate400,
+  },
+  inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  micBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: C.indigo500,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnActive: {
+    backgroundColor: '#ef4444',
   },
   input: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 46,
     maxHeight: 120,
     backgroundColor: '#f1f5f9',
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     fontFamily: 'Poppins_400Regular',
     fontSize: 15,
     color: C.slate800,
@@ -2462,51 +2624,23 @@ const notesStyles = StyleSheet.create({
   saveBtnDisabled: {
     backgroundColor: C.slate300,
   },
-  list: {
-    maxHeight: 380,
-  },
-  listContent: {
-    paddingBottom: 12,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyText: {
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 16,
-    color: C.slate500,
-    marginTop: 12,
-  },
-  emptySubText: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 13,
-    color: C.slate400,
-    marginTop: 4,
-  },
-  noteCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: C.indigo500,
-  },
-  noteText: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 15,
-    color: C.slate700,
-    lineHeight: 22,
-  },
-  noteFooter: {
+  recordingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    backgroundColor: '#fef2f2',
   },
-  noteDate: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 11,
-    color: C.slate400,
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
+  },
+  recordingText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 13,
+    color: '#ef4444',
   },
 });
