@@ -190,7 +190,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNoteText, setNewNoteText] = useState("");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
-  const [videoUploadResult, setVideoUploadResult] = useState<string | null>(null);
+  const [videoUploadResult, setVideoUploadResult] = useState<string | null>(
+    null,
+  );
+  const [isOpeningCamera, setIsOpeningCamera] = useState(false);
+  const [showVideoSourceModal, setShowVideoSourceModal] = useState(false);
+  const [showRecordGuideModal, setShowRecordGuideModal] = useState(false);
 
   // Modal animation
   const translateY = useRef(new Animated.Value(0)).current;
@@ -707,10 +712,33 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     }
   };
 
+  const processContextualReminderVideo = async (videoUri: string) => {
+    setIsUploadingVideo(true);
+    setVideoUploadResult(null);
+
+    try {
+      const response = await ApiService.sendVideoForStepVerification(videoUri);
+      const message =
+        response?.reminder ||
+        response?.message ||
+        "Video processed successfully.";
+      setVideoUploadResult(message);
+    } catch (error) {
+      setVideoUploadResult(
+        "Failed to process video. Please check the backend URL and try again.",
+      );
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
   const handleVideoUpload = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission required", "Please allow access to your media library to upload a video.");
+      Alert.alert(
+        "Permission required",
+        "Please allow access to your media library to upload a video.",
+      );
       return;
     }
 
@@ -723,18 +751,59 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     if (result.canceled || !result.assets || result.assets.length === 0) return;
 
     const videoUri = result.assets[0].uri;
-    setIsUploadingVideo(true);
-    setVideoUploadResult(null);
+    await processContextualReminderVideo(videoUri);
+  };
+
+  const handleVideoRecord = async () => {
+    setIsOpeningCamera(true);
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Please allow camera access to record a video.",
+      );
+      setIsOpeningCamera(false);
+      return;
+    }
 
     try {
-      const response = await ApiService.sendVideoForStepVerification(videoUri);
-      const message = response?.reminder || response?.message || "Video processed successfully.";
-      setVideoUploadResult(message);
-    } catch (error) {
-      setVideoUploadResult("Failed to process video. Please check the backend URL and try again.");
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        quality: 1,
+        videoMaxDuration: 60,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const videoUri = result.assets[0].uri;
+      await processContextualReminderVideo(videoUri);
     } finally {
-      setIsUploadingVideo(false);
+      setIsOpeningCamera(false);
     }
+  };
+
+  const handleChooseVideoUpload = () => {
+    setShowVideoSourceModal(false);
+    void handleVideoUpload();
+  };
+
+  const handleChooseVideoRecord = () => {
+    setShowVideoSourceModal(false);
+    setShowRecordGuideModal(true);
+  };
+
+  const handleLaunchCameraFromGuide = () => {
+    setShowRecordGuideModal(false);
+    void handleVideoRecord();
+  };
+
+  const handleVideoOptionPress = () => {
+    if (isUploadingVideo || isOpeningCamera) return;
+    setShowVideoSourceModal(true);
   };
 
   useEffect(() => {
@@ -1435,16 +1504,21 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                 marginBottom: 14,
               }}
             >
-              Upload a short video clip to test the contextual reminder system. The video will be analysed by the backend and a relevant reminder will be returned.
+              Upload a short video clip or record one with the camera to test
+              the contextual reminder system. The video will be analysed by the
+              backend and a relevant reminder will be returned.
             </Text>
             <TouchableOpacity
-              onPress={handleVideoUpload}
-              disabled={isUploadingVideo}
+              onPress={handleVideoOptionPress}
+              disabled={isUploadingVideo || isOpeningCamera}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: isUploadingVideo ? C.indigo300 : C.indigo500,
+                backgroundColor:
+                  isUploadingVideo || isOpeningCamera
+                    ? C.indigo300
+                    : C.indigo500,
                 borderRadius: 14,
                 paddingVertical: 13,
                 paddingHorizontal: 20,
@@ -1454,7 +1528,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               {isUploadingVideo ? (
                 <ActivityIndicator size="small" color={C.white} />
               ) : (
-                <MaterialIcons name="upload-file" size={20} color={C.white} />
+                <MaterialIcons name="video-library" size={20} color={C.white} />
               )}
               <Text
                 style={{
@@ -1463,7 +1537,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                   color: C.white,
                 }}
               >
-                {isUploadingVideo ? "Processing..." : "Upload Video"}
+                {isUploadingVideo
+                  ? "Processing..."
+                  : isOpeningCamera
+                    ? "Opening Camera..."
+                    : "Upload or Record Video"}
               </Text>
             </TouchableOpacity>
             {videoUploadResult !== null && (
@@ -1604,6 +1682,158 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
       {/* ✅ Face Recognition Popup */}
       {/* Fall Alert Popup */}
+      <Modal
+        visible={showVideoSourceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowVideoSourceModal(false)}
+      >
+        <View style={styles.videoModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowVideoSourceModal(false)}
+          />
+
+          <View style={styles.videoModalCard}>
+            <LinearGradient
+              colors={["#dbeafe", "#ede9fe"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.videoModalTop}
+            >
+              <Text style={styles.videoModalTitle}>Choose Video Source</Text>
+              <Text style={styles.videoModalSubtitle}>
+                Add a clip from your gallery or record one now.
+              </Text>
+            </LinearGradient>
+
+            <View style={styles.videoModalActions}>
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleChooseVideoUpload}
+                style={styles.videoActionBtn}
+              >
+                <View
+                  style={[
+                    styles.videoActionIconWrap,
+                    { backgroundColor: "#e0e7ff" },
+                  ]}
+                >
+                  <MaterialIcons
+                    name="video-library"
+                    size={22}
+                    color="#4f46e5"
+                  />
+                </View>
+                <View style={styles.videoActionTextWrap}>
+                  <Text style={styles.videoActionTitle}>Upload Video</Text>
+                  <Text style={styles.videoActionSubtitle}>
+                    Pick an existing clip
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleChooseVideoRecord}
+                style={styles.videoActionBtn}
+              >
+                <View
+                  style={[
+                    styles.videoActionIconWrap,
+                    { backgroundColor: "#dcfce7" },
+                  ]}
+                >
+                  <MaterialIcons name="videocam" size={22} color="#15803d" />
+                </View>
+                <View style={styles.videoActionTextWrap}>
+                  <Text style={styles.videoActionTitle}>
+                    Record with Camera
+                  </Text>
+                  <Text style={styles.videoActionSubtitle}>
+                    Capture a new clip
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.videoModalCancelBtn}
+                onPress={() => setShowVideoSourceModal(false)}
+              >
+                <Text style={styles.videoModalCancelText}>Not now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showRecordGuideModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRecordGuideModal(false)}
+      >
+        <View style={styles.videoModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowRecordGuideModal(false)}
+          />
+
+          <View style={styles.recordGuideCard}>
+            <Text style={styles.recordGuideTitle}>Record a Test Clip</Text>
+            <Text style={styles.recordGuideSubtitle}>
+              A short, steady recording helps generate a better reminder.
+            </Text>
+
+            <View style={styles.recordGuideTips}>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>Use good lighting</Text>
+              </View>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>
+                  Keep it between 5 and 20 seconds
+                </Text>
+              </View>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>
+                  Keep the activity centered in frame
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleLaunchCameraFromGuide}
+              style={styles.recordGuidePrimaryBtn}
+            >
+              <LinearGradient
+                colors={["#16a34a", "#22c55e"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.recordGuidePrimaryFill}
+              >
+                <MaterialIcons name="videocam" size={20} color="#fff" />
+                <Text style={styles.recordGuidePrimaryText}>Open Camera</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setShowRecordGuideModal(false)}
+              style={styles.recordGuideSecondaryBtn}
+            >
+              <Text style={styles.recordGuideSecondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!fallAlert} transparent animationType="fade">
         <BlurView intensity={40} tint="dark" style={fallStyles.overlay}>
           <View style={fallStyles.centered}>
@@ -2294,6 +2524,156 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     fontSize: 14,
     color: "#df6666ff",
+  },
+
+  videoModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2,6,23,0.45)",
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  videoModalCard: {
+    backgroundColor: C.white,
+    borderRadius: 22,
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  videoModalTop: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  videoModalTitle: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 18,
+    color: C.slate800,
+  },
+  videoModalSubtitle: {
+    marginTop: 4,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 13,
+    color: C.slate600,
+  },
+  videoModalActions: {
+    padding: 14,
+    gap: 10,
+  },
+  videoActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.slate300,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  videoActionIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoActionTextWrap: {
+    marginLeft: 10,
+  },
+  videoActionTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: C.slate800,
+  },
+  videoActionSubtitle: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    color: C.slate500,
+  },
+  videoModalCancelBtn: {
+    marginTop: 2,
+    borderWidth: 1,
+    borderColor: C.slate300,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+  videoModalCancelText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 14,
+    color: C.slate700,
+  },
+  recordGuideCard: {
+    backgroundColor: C.white,
+    borderRadius: 22,
+    padding: 18,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  recordGuideTitle: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 19,
+    color: C.slate800,
+    textAlign: "center",
+  },
+  recordGuideSubtitle: {
+    marginTop: 6,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    color: C.slate600,
+  },
+  recordGuideTips: {
+    marginTop: 14,
+    marginBottom: 16,
+    gap: 8,
+  },
+  recordGuideTipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  recordGuideTipText: {
+    marginLeft: 8,
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
+    color: C.slate700,
+  },
+  recordGuidePrimaryBtn: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  recordGuidePrimaryFill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+  },
+  recordGuidePrimaryText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: C.white,
+  },
+  recordGuideSecondaryBtn: {
+    marginTop: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+  },
+  recordGuideSecondaryText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 14,
+    color: C.slate500,
   },
 
   reminderOverlay: {
