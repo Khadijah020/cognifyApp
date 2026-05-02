@@ -43,6 +43,17 @@ type TaskStep = {
   confidence_score: number;
 };
 
+// Helper: Sanitize text before speech synthesis
+const cleanForSpeech = (text: string): string => {
+  return text
+    .replace(/\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "") // ANSI escape sequences
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "") // Control characters
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // **bold** → plain
+    .replace(/\*([^*]+)\*/g, "$1") // *italic* → plain
+    .replace(/#{1,4}\s/g, "") // ## headers
+    .trim();
+};
+
 export default function VoiceAssistantScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -155,27 +166,35 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       const result = await ApiService.sendAudioForTaskGuidance(uri);
       console.log("📦 Backend response:", JSON.stringify(result, null, 2));
 
-      // FIX: Check for first_step instead of steps
       if (result.success && (result.first_step || result.current_step)) {
-        const firstStep = result.first_step || result.current_step;
-        console.log("✅ Setting first step:", firstStep);
-        setCurrentStep(firstStep);
+        const step = result.first_step || result.current_step;
+        console.log("✅ Setting first step:", step);
+        setCurrentStep(step);
 
-        // Speak first step
-        Speech.speak(firstStep.step_text, {
+        Speech.speak(cleanForSpeech(step.step_text), {
           rate: 0.9,
           pitch: 1.0,
           language: "en-US",
         });
 
-        console.log("✅ First step spoken:", firstStep.step_text);
-        console.log("🔄 Starting polling...");
+        console.log("✅ Step spoken:", step.step_text);
 
-        // Start polling for next steps
-        startPollingForSteps();
+        // FIX 3: Only start polling for brand new sessions.
+        // For resumes, polling is already running — restarting it
+        // causes the stale queue item to be re-delivered and spoken again.
+        if (!result.resumed) {
+          console.log("🔄 New session — starting polling...");
+          startPollingForSteps();
+        } else {
+          console.log(
+            "🔄 Resumed session — polling already running, not restarting.",
+          );
+        }
       } else {
-        console.log("❌ No first_step in response");
-        Speech.speak("I couldn't understand that task. Please try again.");
+        console.log("❌ No step in response");
+        Speech.speak(
+          cleanForSpeech("I couldn't understand that task. Please try again."),
+        );
       }
 
       setIsProcessing(false);
@@ -189,7 +208,6 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
       );
     }
   };
-
   const startPollingForSteps = () => {
     console.log("🔄 Polling started");
     // Clear any existing polling
@@ -224,7 +242,7 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
             });
 
             // Speak the new step
-            Speech.speak(update.step.step_text, {
+            Speech.speak(cleanForSpeech(update.step.step_text), {
               rate: 0.9,
               pitch: 1.0,
               language: "en-US",
@@ -242,7 +260,9 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
               return null;
             });
 
-            Speech.speak("Great job! You've completed all the steps.");
+            Speech.speak(
+              cleanForSpeech("Great job! You've completed all the steps."),
+            );
             stopPollingForSteps();
 
             // Reset after a delay
