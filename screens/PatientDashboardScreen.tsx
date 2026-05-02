@@ -1,63 +1,66 @@
 // PatientDashboardScreen.tsx - COMPLETE WITH DYNAMIC RECENT ACTIVITY
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import * as Speech from 'expo-speech';
+import * as ImagePicker from "expo-image-picker";
+import * as Speech from "expo-speech";
 
-import { MaterialIcons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from "@expo/vector-icons";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Audio } from "expo-av";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    PanResponder,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { Audio } from 'expo-av';
-import { RootStackParamList } from '../app/App';
-import { ApiService } from '../services/ApiService';
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  PanResponder,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { RootStackParamList } from "../app/App";
+import { ApiService } from "../services/ApiService";
 import FallDetectionService from "../services/FallDetectionService";
-import HealthDataService from '../services/HealthDataService';
+import HealthDataService from "../services/HealthDataService";
 
-import PatientActivityService, { PatientActivity } from '../services/PatientActivityService';
-import PatientDeviceStatusService from '../services/PatientDeviceStatusService';
-import { getAuthenticatedPatientProfile } from '../services/PatientService';
-import ReminderHelperService from '../services/ReminderHelperService';
-import { supabase } from '../src/lib/supabase';
+import PatientActivityService, {
+  PatientActivity,
+} from "../services/PatientActivityService";
+import PatientDeviceStatusService from "../services/PatientDeviceStatusService";
+import { getAuthenticatedPatientProfile } from "../services/PatientService";
+import ReminderHelperService from "../services/ReminderHelperService";
+import { supabase } from "../src/lib/supabase";
 
 import {
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-    useFonts,
-} from '@expo-google-fonts/poppins';
-import axios from 'axios';
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  useFonts,
+} from "@expo-google-fonts/poppins";
+import axios from "axios";
 
-type Props = NativeStackScreenProps<RootStackParamList, 'PatientDashboard'>;
+type Props = NativeStackScreenProps<RootStackParamList, "PatientDashboard">;
 
 type ReminderData = {
   id?: string;
   title: string;
   subtitle: string;
-  icon: 'medication' | 'event';
+  icon: "medication" | "event";
   chipColor: string;
   chipBg: string;
   details?: {
@@ -108,35 +111,35 @@ type FallAlertData = {
 };
 
 const C = {
-  bgFrom: '#e0e7ff',
-  bgTo: '#f0f4ff',
-  white: '#ffffff',
-  slate900: '#0f172a',
-  slate800: '#1e293b',
-  slate700: '#334155',
-  slate600: '#475569',
-  slate500: '#64748b',
-  slate400: '#94a3b8',
-  slate300: '#cbd5e1',
-  indigo300: '#c7d2fe',
-  indigo500: '#6366F1',
-  green500: '#22c55e',
-  green100: '#dcfce7',
-  teal500: '#14b8a6',
-  teal50: '#f0fdfa',
-  purple100: '#f3e8ff',
-  purple500: '#a855f7',
-  blue50: '#eff6ff',
-  blue300: '#93c5fd',
-  shadow: 'rgba(0,0,0,0.06)',
-  emerald400: '#34d399',
-  emerald500: '#10b981',
+  bgFrom: "#e0e7ff",
+  bgTo: "#f0f4ff",
+  white: "#ffffff",
+  slate900: "#0f172a",
+  slate800: "#1e293b",
+  slate700: "#334155",
+  slate600: "#475569",
+  slate500: "#64748b",
+  slate400: "#94a3b8",
+  slate300: "#cbd5e1",
+  indigo300: "#c7d2fe",
+  indigo500: "#6366F1",
+  green500: "#22c55e",
+  green100: "#dcfce7",
+  teal500: "#14b8a6",
+  teal50: "#f0fdfa",
+  purple100: "#f3e8ff",
+  purple500: "#a855f7",
+  blue50: "#eff6ff",
+  blue300: "#93c5fd",
+  shadow: "rgba(0,0,0,0.06)",
+  emerald400: "#34d399",
+  emerald500: "#10b981",
 };
 
 const AVATAR =
-  'https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100';
+  "https://lh3.googleusercontent.com/a/ACg8ocLw_b_95Zk8i_32X-y1xX8X2-wE9L7KzQ3qE6pB4P-5e_3A=s96-c-rg-br100";
 
-const STORAGE_KEY = 'cognify_recognized_faces';
+const STORAGE_KEY = "cognify_recognized_faces";
 const FALL_ALERT_COOLDOWN_MS = 2 * 60 * 1000;
 
 export default function PatientDashboardScreen({ navigation }: Props) {
@@ -149,35 +152,53 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
   const [steps, setSteps] = useState(0);
   const [activeMinutes, setActiveMinutes] = useState(0);
-  
+
   const [patientId, setPatientId] = useState<string | null>(null);
-  const [patientName, setPatientName] = useState<string>('Patient');
+  const [patientName, setPatientName] = useState<string>("Patient");
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
-  const [upcomingReminders, setUpcomingReminders] = useState<ReminderData[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<ReminderData[]>(
+    [],
+  );
   const [loadingReminders, setLoadingReminders] = useState(true);
   const [loading, setLoading] = useState(true);
-  
-  const [currentReminder, setCurrentReminder] = useState<ReminderData | null>(null);
-  const [showReminderNotification, setShowReminderNotification] = useState(false);
+
+  const [currentReminder, setCurrentReminder] = useState<ReminderData | null>(
+    null,
+  );
+  const [showReminderNotification, setShowReminderNotification] =
+    useState(false);
 
   // Modal state for reminder details
   const [showReminder, setShowReminder] = useState(false);
-  const [activeReminder, setActiveReminder] = useState<ReminderData | null>(null);
+  const [activeReminder, setActiveReminder] = useState<ReminderData | null>(
+    null,
+  );
 
   // ✅ Face recognition popup state
-  const [recognizedFace, setRecognizedFace] = useState<(RecognizedFace & { confidence?: number }) | null>(null);
+  const [recognizedFace, setRecognizedFace] = useState<
+    (RecognizedFace & { confidence?: number }) | null
+  >(null);
   const [showFacePopup, setShowFacePopup] = useState(false);
   const [localFaces, setLocalFaces] = useState<RecognizedFace[]>([]);
 
   // ✅ NEW: Recent activities state
-  const [recentActivities, setRecentActivities] = useState<PatientActivity[]>([]);
+  const [recentActivities, setRecentActivities] = useState<PatientActivity[]>(
+    [],
+  );
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [fallAlert, setFallAlert] = useState<FallAlertData | null>(null);
 
   // Notes state
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteText, setNewNoteText] = useState("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadResult, setVideoUploadResult] = useState<string | null>(
+    null,
+  );
+  const [isOpeningCamera, setIsOpeningCamera] = useState(false);
+  const [showVideoSourceModal, setShowVideoSourceModal] = useState(false);
+  const [showRecordGuideModal, setShowRecordGuideModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -214,10 +235,13 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       setShowReminder(false);
     });
   };
-  
-  const [contextualRemindersEnabled, setContextualRemindersEnabled] = useState(true);
+
+  const [contextualRemindersEnabled, setContextualRemindersEnabled] =
+    useState(true);
   const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
-  const [currentContextualReminder, setCurrentContextualReminder] = useState<string | undefined>(undefined);
+  const [currentContextualReminder, setCurrentContextualReminder] = useState<
+    string | undefined
+  >(undefined);
   const [showContextualReminder, setShowContextualReminder] = useState(false);
 
   const shouldShowFallAlert = (incomingAlert: FallAlertData) => {
@@ -225,14 +249,14 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     const shown = shownFallAlertsRef.current;
 
     for (const [key, timestamp] of shown.entries()) {
-      if (!key.startsWith('id:') && now - timestamp > FALL_ALERT_COOLDOWN_MS) {
+      if (!key.startsWith("id:") && now - timestamp > FALL_ALERT_COOLDOWN_MS) {
         shown.delete(key);
       }
     }
 
     const alertKey = incomingAlert.id
       ? `id:${incomingAlert.id}`
-      : `fallback:${incomingAlert.patient_id || patientId || 'unknown'}:${incomingAlert.created_at || ''}:${incomingAlert.source || 'unknown'}`;
+      : `fallback:${incomingAlert.patient_id || patientId || "unknown"}:${incomingAlert.created_at || ""}:${incomingAlert.source || "unknown"}`;
 
     if (shown.has(alertKey)) {
       return false;
@@ -242,19 +266,24 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     return true;
   };
 
-  const handleIncomingFallAlert = (incomingAlert: FallAlertData & { timestamp?: string }) => {
+  const handleIncomingFallAlert = (
+    incomingAlert: FallAlertData & { timestamp?: string },
+  ) => {
     const normalizedAlert: FallAlertData = {
       ...incomingAlert,
       patient_id: incomingAlert.patient_id || patientId || undefined,
       caregiver_id: incomingAlert.caregiver_id || caregiverId || undefined,
       patient_name: incomingAlert.patient_name || patientName,
-      status: incomingAlert.status || 'active',
-      source: incomingAlert.source || 'video',
-      created_at: incomingAlert.created_at || incomingAlert.timestamp || new Date().toISOString(),
+      status: incomingAlert.status || "active",
+      source: incomingAlert.source || "video",
+      created_at:
+        incomingAlert.created_at ||
+        incomingAlert.timestamp ||
+        new Date().toISOString(),
     };
 
     if (!shouldShowFallAlert(normalizedAlert)) {
-      console.log('Skipping duplicate patient fall alert:', normalizedAlert);
+      console.log("Skipping duplicate patient fall alert:", normalizedAlert);
       return;
     }
 
@@ -262,11 +291,14 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     loadRecentActivities();
 
     if (voiceAlertsEnabled) {
-      Speech.speak('A fall has been detected. Your caregiver has been notified.', {
-        language: 'en-US',
-        pitch: 1.0,
-        rate: 0.9,
-      });
+      Speech.speak(
+        "A fall has been detected. Your caregiver has been notified.",
+        {
+          language: "en-US",
+          pitch: 1.0,
+          rate: 0.9,
+        },
+      );
     }
   };
 
@@ -285,7 +317,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           animateTo(0);
         }
       },
-    })
+    }),
   ).current;
 
   // ✅ Load local faces from storage
@@ -300,10 +332,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         setLocalFaces(JSON.parse(stored));
-        console.log('✅ Loaded local faces:', JSON.parse(stored).length);
+        console.log("✅ Loaded local faces:", JSON.parse(stored).length);
       }
     } catch (error) {
-      console.error('❌ Error loading local faces:', error);
+      console.error("❌ Error loading local faces:", error);
     }
   };
 
@@ -312,7 +344,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       const stored = await AsyncStorage.getItem(`patient_notes_${pid}`);
       if (stored) setNotes(JSON.parse(stored));
     } catch (error) {
-      console.error('❌ Error loading notes:', error);
+      console.error("❌ Error loading notes:", error);
     }
   };
 
@@ -328,46 +360,57 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     const updated = [note, ...notes];
     setNotes(updated);
-    setNewNoteText('');
+    setNewNoteText("");
     Keyboard.dismiss();
 
     try {
-      await AsyncStorage.setItem(`patient_notes_${patientId}`, JSON.stringify(updated));
+      await AsyncStorage.setItem(
+        `patient_notes_${patientId}`,
+        JSON.stringify(updated),
+      );
     } catch (error) {
-      console.error('❌ Error saving note:', error);
+      console.error("❌ Error saving note:", error);
     }
   };
 
   const deleteNote = async (id: string) => {
-    Alert.alert('Delete Note', 'Are you sure you want to delete this note?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Delete Note", "Are you sure you want to delete this note?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Delete',
-        style: 'destructive',
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
-          const updated = notes.filter(n => n.id !== id);
+          const updated = notes.filter((n) => n.id !== id);
           setNotes(updated);
           try {
-            await AsyncStorage.setItem(`patient_notes_${patientId}`, JSON.stringify(updated));
+            await AsyncStorage.setItem(
+              `patient_notes_${patientId}`,
+              JSON.stringify(updated),
+            );
           } catch (error) {
-            console.error('❌ Error deleting note:', error);
+            console.error("❌ Error deleting note:", error);
           }
         },
       },
     ]);
   };
-
   const formatNoteDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      + ' · '
-      + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return (
+      d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }) +
+      " · " +
+      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    );
   };
 
   const M4A_OPTIONS: Audio.RecordingOptions = {
     isMeteringEnabled: false,
     android: {
-      extension: '.m4a',
+      extension: ".m4a",
       outputFormat: Audio.AndroidOutputFormat.MPEG_4,
       audioEncoder: Audio.AndroidAudioEncoder.AAC,
       sampleRate: 16000,
@@ -375,7 +418,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       bitRate: 64000,
     },
     ios: {
-      extension: '.m4a',
+      extension: ".m4a",
       outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
       audioQuality: Audio.IOSAudioQuality.MEDIUM,
       sampleRate: 16000,
@@ -392,13 +435,15 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     try {
       const result = await ApiService.sendAudioForSTT(uri);
       if (result.transcript?.trim()) {
-        setNewNoteText(prev => {
+        setNewNoteText((prev) => {
           const t = prev.trim();
-          return t ? `${t} ${result.transcript.trim()}` : result.transcript.trim();
+          return t
+            ? `${t} ${result.transcript.trim()}`
+            : result.transcript.trim();
         });
       }
     } catch (err) {
-      console.log('STT chunk error:', err);
+      console.log("STT chunk error:", err);
     }
   };
 
@@ -418,17 +463,23 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       const { recording } = await Audio.Recording.createAsync(M4A_OPTIONS);
       recordingRef.current = recording;
     } catch (err) {
-      console.log('Recording start error:', err);
+      console.log("Recording start error:", err);
     }
   };
 
   const startVoiceRecording = async () => {
     const { granted } = await Audio.requestPermissionsAsync();
     if (!granted) {
-      Alert.alert('Permission needed', 'Microphone access is required to use voice notes.');
+      Alert.alert(
+        "Permission needed",
+        "Microphone access is required to use voice notes.",
+      );
       return;
     }
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+    });
     isStoppingRef.current = false;
     setIsRecording(true);
     await recordChunk();
@@ -453,13 +504,15 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   };
 
   // ✅ Animate face popup in
-  const showFaceRecognitionPopup = (face: RecognizedFace & { confidence?: number }) => {
+  const showFaceRecognitionPopup = (
+    face: RecognizedFace & { confidence?: number },
+  ) => {
     setRecognizedFace(face);
     setShowFacePopup(true);
-    
+
     facePopupScale.setValue(0.8);
     facePopupOpacity.setValue(0);
-    
+
     Animated.parallel([
       Animated.spring(facePopupScale, {
         toValue: 1,
@@ -501,43 +554,58 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const loadUserData = async () => {
     try {
       setLoading(true);
-
       const patientProfile = await getAuthenticatedPatientProfile();
-      
+
       if (!patientProfile) {
-        Alert.alert('Error', 'Patient profile not found. Please log in again.');
-        navigation.replace('Login');
+        Alert.alert("Error", "Patient profile not found. Please log in again.");
+        navigation.replace("Login");
         return;
       }
 
-      console.log('✅ Patient profile loaded:', patientProfile.id, patientProfile.full_name);
+      console.log(
+        "✅ Patient profile loaded:",
+        patientProfile.id,
+        patientProfile.full_name,
+      );
       setPatientId(patientProfile.id);
-      setPatientName(patientProfile.full_name || 'Patient');
+      setPatientName(patientProfile.full_name || "Patient");
       loadNotes(patientProfile.id);
 
-      const caregiverIdFromProfile = patientProfile.caregiver_id;
-      
-      if (caregiverIdFromProfile) {
-        console.log('✅ Caregiver ID found:', caregiverIdFromProfile);
-        setCaregiverId(caregiverIdFromProfile);
-        
-        console.log('🚀 Starting fall detection service...');
-        FallDetectionService.start(patientProfile.id, caregiverIdFromProfile);
-        FallDetectionService.startVideoPolling(patientProfile.id, caregiverIdFromProfile);
-        console.log('✅ Fall detection service started successfully');
-      } else {
-        console.warn('⚠️ No caregiver assigned to this patient');
-        Alert.alert(
-          'No Caregiver Assigned',
-          'Fall detection requires a caregiver to be assigned to your account.',
-          [{ text: 'OK' }]
-        );
+      // ✅ ADD THESE
+      console.log("🔐 Requesting health permissions...");
+      try {
+        const granted = await HealthDataService.requestHealthPermissions();
+        console.log("🔐 Health permissions result:", granted);
+      } catch (permError) {
+        console.log("🔐 Health permissions ERROR:", permError);
       }
 
+      console.log("🚗 Setting up caregiver...");
+      const caregiverIdFromProfile = patientProfile.caregiver_id;
+
+      if (caregiverIdFromProfile) {
+        console.log("✅ Caregiver ID found:", caregiverIdFromProfile);
+        setCaregiverId(caregiverIdFromProfile);
+
+        console.log("🚀 Starting fall detection service...");
+        FallDetectionService.start(patientProfile.id, caregiverIdFromProfile);
+        FallDetectionService.startVideoPolling(
+          patientProfile.id,
+          caregiverIdFromProfile,
+        );
+        console.log("✅ Fall detection service started successfully");
+      } else {
+        console.warn("⚠️ No caregiver assigned to this patient");
+        Alert.alert(
+          "No Caregiver Assigned",
+          "Fall detection requires a caregiver to be assigned to your account.",
+          [{ text: "OK" }],
+        );
+      }
     } catch (error) {
-      console.error('❌ Error loading user data:', error);
-      Alert.alert('Error', 'Failed to load dashboard.');
-      navigation.replace('Login');
+      console.error("❌ Error loading user data:", error);
+      Alert.alert("Error", "Failed to load dashboard.");
+      navigation.replace("Login");
     } finally {
       setLoading(false);
     }
@@ -550,20 +618,20 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     const interval = setInterval(loadUpcomingReminders, 5 * 60 * 1000);
 
     const subscription = supabase
-      .channel('patient-reminders')
+      .channel("patient-reminders")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'reminders',
+          event: "*",
+          schema: "public",
+          table: "reminders",
           filter: `patient_id=eq.${patientId}`,
         },
         () => {
-          console.log('📡 Reminder changed - reloading list');
+          console.log("📡 Reminder changed - reloading list");
           loadUpcomingReminders();
           loadRecentActivities(); // ✅ Refresh activities when reminders change
-        }
+        },
       )
       .subscribe();
 
@@ -580,7 +648,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     if (!patientId) return;
 
     loadRecentActivities();
-    
+
     // Refresh activities every 2 minutes
     const interval = setInterval(loadRecentActivities, 2 * 60 * 1000);
 
@@ -593,13 +661,16 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     let cancelled = false;
 
     const pollBackendFallAlerts = async () => {
-      const response = await ApiService.getBackendFallAlerts(caregiverId, patientId);
+      const response = await ApiService.getBackendFallAlerts(
+        caregiverId,
+        patientId,
+      );
       if (cancelled) return;
 
       for (const backendAlert of response.alerts) {
         handleIncomingFallAlert({
           ...backendAlert,
-          source: backendAlert.source || 'video',
+          source: backendAlert.source || "video",
         });
       }
     };
@@ -619,14 +690,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     try {
       setLoadingActivities(true);
-      console.log('📋 Loading recent activities for patient:', patientId);
-      
-      const activities = await PatientActivityService.getRecentActivities(patientId, 10);
-      
+      console.log("📋 Loading recent activities for patient:", patientId);
+
+      const activities = await PatientActivityService.getRecentActivities(
+        patientId,
+        10,
+      );
+
       setRecentActivities(activities);
-      console.log('✅ Loaded', activities.length, 'recent activities');
+      console.log("✅ Loaded", activities.length, "recent activities");
     } catch (error) {
-      console.error('❌ Error loading recent activities:', error);
+      console.error("❌ Error loading recent activities:", error);
     } finally {
       setLoadingActivities(false);
     }
@@ -638,17 +712,20 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     const checkForDueReminders = async () => {
       try {
         const { data: allReminders, error } = await supabase
-          .from('reminders')
-          .select('*')
-          .eq('patient_id', patientId)
-          .eq('status', 'pending');
+          .from("reminders")
+          .select("*")
+          .eq("patient_id", patientId)
+          .eq("status", "pending");
 
         if (error || !allReminders) return;
 
         const now = new Date();
-        
-        const dueReminders = allReminders.filter(r => {
-          const reminderTime = ReminderHelperService.parseReminderDateTime(r.date, r.time);
+
+        const dueReminders = allReminders.filter((r) => {
+          const reminderTime = ReminderHelperService.parseReminderDateTime(
+            r.date,
+            r.time,
+          );
           const timeDiff = reminderTime.getTime() - now.getTime();
           // Show only in a tight window: 30s after due to 10s before due
           return timeDiff >= -30 * 1000 && timeDiff <= 10 * 1000;
@@ -656,29 +733,38 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
         if (dueReminders.length > 0 && !showReminderNotification) {
           const reminder = dueReminders[0];
-          
+
           const lastShownKey = `reminder_shown_${reminder.id}`;
           const lastShownTime = await AsyncStorage.getItem(lastShownKey);
-          
+
           if (lastShownTime) {
             const timeSinceShown = now.getTime() - parseInt(lastShownTime, 10);
             if (timeSinceShown < 5 * 60 * 1000) {
-              console.log('⏭️ Skipping reminder - already shown recently:', reminder.title);
+              console.log(
+                "⏭️ Skipping reminder - already shown recently:",
+                reminder.title,
+              );
               return;
             }
           }
-          
-          const displayData = ReminderHelperService.convertToReminderData(reminder);
-          
-          console.log('⏰ SIMPLE REMINDER DUE NOW:', reminder.title, 'at', reminder.time);
-          
+
+          const displayData =
+            ReminderHelperService.convertToReminderData(reminder);
+
+          console.log(
+            "⏰ SIMPLE REMINDER DUE NOW:",
+            reminder.title,
+            "at",
+            reminder.time,
+          );
+
           await AsyncStorage.setItem(lastShownKey, now.getTime().toString());
-          
+
           setCurrentReminder(displayData);
           setShowReminderNotification(true);
         }
       } catch (error) {
-        console.error('❌ Error checking due reminders:', error);
+        console.error("❌ Error checking due reminders:", error);
       }
     };
 
@@ -696,42 +782,140 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       setLoadingReminders(true);
 
       const { data: allReminders, error } = await supabase
-        .from('reminders')
-        .select('*')
-        .eq('patient_id', patientId)
-        .eq('status', 'pending')
-        .order('date', { ascending: true })
-        .order('time', { ascending: true });
+        .from("reminders")
+        .select("*")
+        .eq("patient_id", patientId)
+        .eq("status", "pending")
+        .order("date", { ascending: true })
+        .order("time", { ascending: true });
 
       if (error) throw error;
 
-      console.log('📋 Fetched patient reminders:', allReminders?.length || 0);
+      console.log("📋 Fetched patient reminders:", allReminders?.length || 0);
 
       if (!allReminders || allReminders.length === 0) {
         setUpcomingReminders([]);
         return;
       }
 
-      const upcoming = ReminderHelperService.filterUpcomingReminders(allReminders, 24);
-      const displayReminders = upcoming.map(r =>
-        ReminderHelperService.convertToReminderData(r)
+      const upcoming = ReminderHelperService.filterUpcomingReminders(
+        allReminders,
+        24,
+      );
+      const displayReminders = upcoming.map((r) =>
+        ReminderHelperService.convertToReminderData(r),
       );
 
       setUpcomingReminders(displayReminders);
-      console.log('✅ Loaded', displayReminders.length, 'upcoming reminders');
+      console.log("✅ Loaded", displayReminders.length, "upcoming reminders");
     } catch (error) {
-      console.error('❌ Failed to load reminders:', error);
+      console.error("❌ Failed to load reminders:", error);
     } finally {
       setLoadingReminders(false);
     }
   };
 
+  const processContextualReminderVideo = async (videoUri: string) => {
+    setIsUploadingVideo(true);
+    setVideoUploadResult(null);
+
+    try {
+      const response = await ApiService.sendVideoForStepVerification(videoUri);
+      const message =
+        response?.reminder ||
+        response?.message ||
+        "Video processed successfully.";
+      setVideoUploadResult(message);
+    } catch (error) {
+      setVideoUploadResult(
+        "Failed to process video. Please check the backend URL and try again.",
+      );
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleVideoUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Please allow access to your media library to upload a video.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+    const videoUri = result.assets[0].uri;
+    await processContextualReminderVideo(videoUri);
+  };
+
+  const handleVideoRecord = async () => {
+    setIsOpeningCamera(true);
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Please allow camera access to record a video.",
+      );
+      setIsOpeningCamera(false);
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        quality: 1,
+        videoMaxDuration: 60,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const videoUri = result.assets[0].uri;
+      await processContextualReminderVideo(videoUri);
+    } finally {
+      setIsOpeningCamera(false);
+    }
+  };
+
+  const handleChooseVideoUpload = () => {
+    setShowVideoSourceModal(false);
+    void handleVideoUpload();
+  };
+
+  const handleChooseVideoRecord = () => {
+    setShowVideoSourceModal(false);
+    setShowRecordGuideModal(true);
+  };
+
+  const handleLaunchCameraFromGuide = () => {
+    setShowRecordGuideModal(false);
+    void handleVideoRecord();
+  };
+
+  const handleVideoOptionPress = () => {
+    if (isUploadingVideo || isOpeningCamera) return;
+    setShowVideoSourceModal(true);
+  };
+
   useEffect(() => {
     (async () => {
-      const remindersPref = await AsyncStorage.getItem('contextualReminders');
-      const voicePref = await AsyncStorage.getItem('voiceAlerts');
-      if (remindersPref !== null) setContextualRemindersEnabled(remindersPref === 'true');
-      if (voicePref !== null) setVoiceAlertsEnabled(voicePref === 'true');
+      const remindersPref = await AsyncStorage.getItem("contextualReminders");
+      const voicePref = await AsyncStorage.getItem("voiceAlerts");
+      if (remindersPref !== null)
+        setContextualRemindersEnabled(remindersPref === "true");
+      if (voicePref !== null) setVoiceAlertsEnabled(voicePref === "true");
     })();
   }, []);
 
@@ -755,9 +939,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     try {
       const status = await PatientDeviceStatusService.collectDeviceStatus();
-      await PatientDeviceStatusService.syncPatientDeviceStatus(patientId, status);
+      await PatientDeviceStatusService.syncPatientDeviceStatus(
+        patientId,
+        status,
+      );
     } catch (error) {
-      console.log('Error syncing patient device status:', error);
+      console.log("Error syncing patient device status:", error);
     }
   };
 
@@ -768,10 +955,13 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       setActiveMinutes(healthData.activeMinutes);
 
       if (patientId) {
-        await HealthDataService.syncPatientDailyHealthData(patientId, healthData);
+        await HealthDataService.syncPatientDailyHealthData(
+          patientId,
+          healthData,
+        );
       }
     } catch (error) {
-      console.log('Error loading health data:', error);
+      console.log("Error loading health data:", error);
     }
   };
 
@@ -780,13 +970,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get(ApiService.getApiEndpoint('/get_reminders'), {
-          headers: { 'ngrok-skip-browser-warning': 'true' },
-        });
+        const res = await axios.get(
+          ApiService.getApiEndpoint("/get_reminders"),
+          {
+            headers: { "ngrok-skip-browser-warning": "true" },
+          },
+        );
         const reminders = res.data.reminders || [];
 
         if (reminders.length > 0) {
-          const reminderText = reminders[0].reminder || "You have a new reminder";
+          const reminderText =
+            reminders[0].reminder || "You have a new reminder";
 
           setCurrentContextualReminder(reminderText);
           setShowContextualReminder(true);
@@ -796,7 +990,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           }
         }
       } catch (err) {
-        console.log('Error fetching contextual reminders:', err);
+        console.log("Error fetching contextual reminders:", err);
       }
     }, 5000);
 
@@ -805,95 +999,107 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
   // ✅ Poll for face recognitions with local face matching
   useEffect(() => {
-  const interval = setInterval(async () => {
-    try {
-      const res = await axios.get(ApiService.getApiEndpoint('/get_face_recognitions'), {
-        headers: { 'ngrok-skip-browser-warning': 'true' },
-      });
-      const faces: FaceRecognitionData[] = res.data.faces || [];
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(
+          ApiService.getApiEndpoint("/get_face_recognitions"),
+          {
+            headers: { "ngrok-skip-browser-warning": "true" },
+          },
+        );
+        const faces: FaceRecognitionData[] = res.data.faces || [];
 
-      if (faces.length > 0) {
-        for (const faceData of faces) {
-          // ✅ Check cooldown - don't show popup if shown within last hour
-          const cooldownKey = `face_shown_${faceData.name.toLowerCase().trim()}`;
-          const lastShownTime = await AsyncStorage.getItem(cooldownKey);
-          
-          if (lastShownTime) {
-            const timeSinceShown = Date.now() - parseInt(lastShownTime, 10);
-            const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
-            
-            if (timeSinceShown < oneHourInMs) {
-              console.log(`⏭️ Skipping ${faceData.name} - shown ${Math.round(timeSinceShown / 60000)} minutes ago`);
-              continue; // Skip this person
+        if (faces.length > 0) {
+          for (const faceData of faces) {
+            // ✅ Check cooldown - don't show popup if shown within last hour
+            const cooldownKey = `face_shown_${faceData.name.toLowerCase().trim()}`;
+            const lastShownTime = await AsyncStorage.getItem(cooldownKey);
+
+            if (lastShownTime) {
+              const timeSinceShown = Date.now() - parseInt(lastShownTime, 10);
+              const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
+
+              if (timeSinceShown < oneHourInMs) {
+                console.log(
+                  `⏭️ Skipping ${faceData.name} - shown ${Math.round(timeSinceShown / 60000)} minutes ago`,
+                );
+                continue; // Skip this person
+              }
             }
-          }
 
-          // Find matching local face
-          const localFace = localFaces.find(
-            f => f.name.toLowerCase().trim() === faceData.name.toLowerCase().trim()
-          );
+            // Find matching local face
+            const localFace = localFaces.find(
+              (f) =>
+                f.name.toLowerCase().trim() ===
+                faceData.name.toLowerCase().trim(),
+            );
 
-          // ✅ Set cooldown timestamp BEFORE showing popup
-          await AsyncStorage.setItem(cooldownKey, Date.now().toString());
+            // ✅ Set cooldown timestamp BEFORE showing popup
+            await AsyncStorage.setItem(cooldownKey, Date.now().toString());
 
-          // Show popup
-          if (localFace) {
-            showFaceRecognitionPopup({
-              ...localFace,
-              confidence: faceData.confidence,
-            });
-
-            if (voiceAlertsEnabled) {
-              const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
-              Speech.speak(message, {
-                language: 'en-US',
-                pitch: 1.0,
-                rate: 0.9,
+            // Show popup
+            if (localFace) {
+              showFaceRecognitionPopup({
+                ...localFace,
+                confidence: faceData.confidence,
               });
-            }
-          } else {
-            showFaceRecognitionPopup({
-              id: Date.now().toString(),
-              name: faceData.name,
-              relationship: faceData.relationship,
-              imageUri: '',
-              dateAdded: new Date().toISOString(),
-              confidence: faceData.confidence,
-            });
 
-            if (voiceAlertsEnabled) {
-              const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
-              Speech.speak(message, {
-                language: 'en-US',
-                pitch: 1.0,
-                rate: 0.9,
+              if (voiceAlertsEnabled) {
+                const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
+                Speech.speak(message, {
+                  language: "en-US",
+                  pitch: 1.0,
+                  rate: 0.9,
+                });
+              }
+            } else {
+              showFaceRecognitionPopup({
+                id: Date.now().toString(),
+                name: faceData.name,
+                relationship: faceData.relationship,
+                imageUri: "",
+                dateAdded: new Date().toISOString(),
+                confidence: faceData.confidence,
               });
-            }
-          }
 
-          // ✅ Refresh activities after face recognition
-          loadRecentActivities();
+              if (voiceAlertsEnabled) {
+                const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
+                Speech.speak(message, {
+                  language: "en-US",
+                  pitch: 1.0,
+                  rate: 0.9,
+                });
+              }
+            }
+
+            // ✅ Refresh activities after face recognition
+            loadRecentActivities();
+          }
         }
+      } catch (err) {
+        console.log("Error fetching face recognitions:", err);
       }
-    } catch (err) {
-      console.log('Error fetching face recognitions:', err);
-    }
-  }, 3000);
+    }, 3000);
 
-  return () => clearInterval(interval);
-}, [voiceAlertsEnabled, localFaces]);
+    return () => clearInterval(interval);
+  }, [voiceAlertsEnabled, localFaces]);
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
+  if (!fontsLoaded)
+    return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
   const callCaregiver = async () => {
-    const phone = '+11234567890';
+    const phone = "+11234567890";
     const url = `tel:${phone}`;
     const supported = await Linking.canOpenURL(url);
-    if (!supported) Alert.alert('Call not available on this device');
+    if (!supported) Alert.alert("Call not available on this device");
     else Linking.openURL(url);
   };
 
-  const MedicationReminderPopup: React.FC<{ visible: boolean; reminder: ReminderData | null; onClose: () => void }> = ({ visible, reminder, onClose }) => {
+  const MedicationReminderPopup: React.FC<{
+    visible: boolean;
+    reminder: ReminderData | null;
+    onClose: () => void;
+  }> = ({ visible, reminder, onClose }) => {
     const [timeRemaining, setTimeRemaining] = React.useState(300);
     const timerStartTimeRef = React.useRef<number | null>(null);
     const timerIntervalRef = React.useRef<number | null>(null);
@@ -901,14 +1107,16 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     React.useEffect(() => {
       if (visible && reminder) {
-        console.log('⏱️ Starting 5-minute timer for reminder:', reminder.id);
-        
+        console.log("⏱️ Starting 5-minute timer for reminder:", reminder.id);
+
         timerStartTimeRef.current = Date.now();
         setTimeRemaining(300);
 
         timerIntervalRef.current = window.setInterval(() => {
           if (timerStartTimeRef.current) {
-            const elapsed = Math.floor((Date.now() - timerStartTimeRef.current) / 1000);
+            const elapsed = Math.floor(
+              (Date.now() - timerStartTimeRef.current) / 1000,
+            );
             const remaining = Math.max(0, 300 - elapsed);
             setTimeRemaining(remaining);
           }
@@ -950,114 +1158,114 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         onClose();
         return;
       }
-      
+
       try {
-        console.log('❌ Marking reminder as missed:', reminder.id);
-        
+        console.log("❌ Marking reminder as missed:", reminder.id);
+
         await supabase
-          .from('reminders')
-          .update({ status: 'missed' })
-          .eq('id', reminder.id);
-        
-        console.log('✅ Reminder marked as missed');
-        
+          .from("reminders")
+          .update({ status: "missed" })
+          .eq("id", reminder.id);
+
+        console.log("✅ Reminder marked as missed");
+
         await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
         await loadUpcomingReminders();
         await loadRecentActivities(); // ✅ Refresh activities
       } catch (error) {
-        console.error('❌ Error marking reminder as missed:', error);
+        console.error("❌ Error marking reminder as missed:", error);
       }
-      
+
       clearTimers();
       onClose();
     };
 
     const handleTaken = async () => {
       clearTimers();
-      
+
       if (!reminder?.id) {
         onClose();
         return;
       }
-      
+
       try {
-        console.log('✅ Marking reminder as completed:', reminder.id);
-        
+        console.log("✅ Marking reminder as completed:", reminder.id);
+
         await supabase
-          .from('reminders')
-          .update({ status: 'completed' })
-          .eq('id', reminder.id);
-        
-        console.log('✅ Reminder marked as completed');
-        
+          .from("reminders")
+          .update({ status: "completed" })
+          .eq("id", reminder.id);
+
+        console.log("✅ Reminder marked as completed");
+
         await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
         await loadUpcomingReminders();
         await loadRecentActivities(); // ✅ Refresh activities
       } catch (error) {
-        console.error('❌ Error updating reminder:', error);
+        console.error("❌ Error updating reminder:", error);
       }
-      
+
       onClose();
     };
 
     const handleLater = async () => {
       clearTimers();
-      
+
       if (!reminder?.id) {
         onClose();
         return;
       }
-      
+
       try {
         const now = new Date();
         const newTime = new Date(now.getTime() + 10 * 60 * 1000);
-        
+
         const hours = newTime.getHours();
         const minutes = newTime.getMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const ampm = hours >= 12 ? "PM" : "AM";
         const displayHours = hours % 12 || 12;
-        const displayMinutes = minutes.toString().padStart(2, '0');
+        const displayMinutes = minutes.toString().padStart(2, "0");
         const newTimeString = `${displayHours}:${displayMinutes} ${ampm}`;
-        
+
         const year = newTime.getFullYear();
-        const month = String(newTime.getMonth() + 1).padStart(2, '0');
-        const day = String(newTime.getDate()).padStart(2, '0');
+        const month = String(newTime.getMonth() + 1).padStart(2, "0");
+        const day = String(newTime.getDate()).padStart(2, "0");
         const newDate = `${year}-${month}-${day}`;
-        
-        console.log('⏰ Rescheduling reminder to:', newDate, newTimeString);
-        
+
+        console.log("⏰ Rescheduling reminder to:", newDate, newTimeString);
+
         await supabase
-          .from('reminders')
-          .update({ 
+          .from("reminders")
+          .update({
             date: newDate,
             time: newTimeString,
-            status: 'pending'
+            status: "pending",
           })
-          .eq('id', reminder.id);
-        
-        console.log('✅ Reminder rescheduled for 10 minutes later');
-        
+          .eq("id", reminder.id);
+
+        console.log("✅ Reminder rescheduled for 10 minutes later");
+
         await AsyncStorage.removeItem(`reminder_shown_${reminder.id}`);
-        
+
         Alert.alert(
-          'Reminder Snoozed',
+          "Reminder Snoozed",
           `I'll remind you again at ${newTimeString}`,
-          [{ text: 'OK' }]
+          [{ text: "OK" }],
         );
-        
+
         await loadUpcomingReminders();
       } catch (error) {
-        console.error('❌ Error rescheduling reminder:', error);
-        Alert.alert('Error', 'Failed to reschedule reminder');
+        console.error("❌ Error rescheduling reminder:", error);
+        Alert.alert("Error", "Failed to reschedule reminder");
       }
-      
+
       onClose();
     };
 
     const formatTimeRemaining = () => {
       const minutes = Math.floor(timeRemaining / 60);
       const seconds = timeRemaining % 60;
-      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
     };
 
     if (!visible || !reminder) return null;
@@ -1066,22 +1274,24 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       <View style={styles.reminderOverlay}>
         <View style={styles.reminderContainer}>
           <LinearGradient
-            colors={['#818cf8', '#a78bfa']}
+            colors={["#818cf8", "#a78bfa"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.reminderCardModern}
           >
             <View style={styles.timerBadge}>
               <MaterialIcons name="timer" size={14} color="#fff" />
-              <Text style={styles.timerText}>Auto-close in {formatTimeRemaining()}</Text>
+              <Text style={styles.timerText}>
+                Auto-close in {formatTimeRemaining()}
+              </Text>
             </View>
 
             <View style={styles.reminderIconOuter}>
               <View style={styles.reminderIconInner}>
-                <MaterialIcons 
-                  name={reminder.icon as any} 
-                  size={50} 
-                  color="#fff" 
+                <MaterialIcons
+                  name={reminder.icon as any}
+                  size={50}
+                  color="#fff"
                 />
               </View>
             </View>
@@ -1089,7 +1299,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <Text style={styles.reminderMainTitle}>{reminder.title}</Text>
             <Text style={styles.reminderMessage}>
               {reminder.subtitle}
-              {reminder.details?.instructions && `\n${reminder.details.instructions}`}
+              {reminder.details?.instructions &&
+                `\n${reminder.details.instructions}`}
             </Text>
 
             <TouchableOpacity
@@ -1098,7 +1309,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               onPress={handleTaken}
             >
               <Text style={styles.primaryBtnText}>
-                {reminder.icon === 'medication' ? "I've taken it" : 'Mark as Done'}
+                {reminder.icon === "medication"
+                  ? "I've taken it"
+                  : "Mark as Done"}
               </Text>
             </TouchableOpacity>
 
@@ -1107,9 +1320,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               activeOpacity={0.9}
               onPress={handleLater}
             >
-              <Text style={styles.secondaryBtnText}>Remind me later (10 min)</Text>
+              <Text style={styles.secondaryBtnText}>
+                Remind me later (10 min)
+              </Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={styles.dismissBtn}
               activeOpacity={0.9}
@@ -1137,8 +1352,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     return (
       <Modal visible={visible} transparent animationType="none">
         <View style={faceStyles.overlay}>
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
-          
+          <BlurView
+            intensity={40}
+            tint="dark"
+            style={StyleSheet.absoluteFillObject}
+          />
+
           <Animated.View
             style={[
               faceStyles.popupContainer,
@@ -1149,15 +1368,15 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             ]}
           >
             <LinearGradient
-              colors={['#6ee7b7', '#34d399']}
+              colors={["#6ee7b7", "#34d399"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={faceStyles.popup}
             >
               {/* Face Image */}
               {face.imageUri ? (
-                <Image 
-                  source={{ uri: face.imageUri }} 
+                <Image
+                  source={{ uri: face.imageUri }}
                   style={faceStyles.faceImage}
                 />
               ) : (
@@ -1169,7 +1388,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               {/* Text Content */}
               <Text style={faceStyles.subtitle}>You know this person!</Text>
               <Text style={faceStyles.name}>{face.name}</Text>
-              <Text style={faceStyles.relationship}>Your {face.relationship}</Text>
+              <Text style={faceStyles.relationship}>
+                Your {face.relationship}
+              </Text>
 
               {/* Optional: Show confidence */}
               {face.confidence && (
@@ -1210,12 +1431,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <Text style={styles.avatarText}>
               {patientName
                 ? patientName
-                    .split(' ')
+                    .split(" ")
                     .map((n) => n[0])
-                    .join('')
+                    .join("")
                     .toUpperCase()
                     .slice(0, 2)
-                : 'P'}
+                : "P"}
             </Text>
           </View>
         </View>
@@ -1224,12 +1445,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         <View style={{ paddingHorizontal: 24, marginTop: 8 }}>
           <TouchableOpacity activeOpacity={0.9} onPress={callCaregiver}>
             <LinearGradient
-              colors={['#60a5fa', '#a78bfa']}
+              colors={["#60a5fa", "#a78bfa"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.callBtn}
             >
-              <MaterialIcons name="call" size={30} color="#fff" style={{ marginRight: 10 }} />
+              <MaterialIcons
+                name="call"
+                size={30}
+                color="#fff"
+                style={{ marginRight: 10 }}
+              />
               <Text style={styles.callText}>Call My Caregiver</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -1239,7 +1465,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         <View style={{ paddingHorizontal: 24, marginTop: 22 }}>
           <View style={styles.cardRow}>
             <View style={styles.rowLeft}>
-              <View style={[styles.iconBox, { backgroundColor: '#dcfce7' }]}>
+              <View style={[styles.iconBox, { backgroundColor: "#dcfce7" }]}>
                 <MaterialIcons name="photo-camera" size={21} color="#22c55e" />
               </View>
               <Text style={styles.rowTitle}>Device</Text>
@@ -1252,7 +1478,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         {/* Quick Actions */}
         <SectionTitle>Quick Actions</SectionTitle>
         <View style={styles.quickGrid}>
-          <TouchableOpacity activeOpacity={0.9} style={[styles.card, styles.quickItem]} onPress={() => navigation.navigate('VoiceAssistant')}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[styles.card, styles.quickItem]}
+            onPress={() => navigation.navigate("VoiceAssistant")}
+          >
             <MaterialIcons name="mic" size={30} color={C.indigo500} />
             <Text style={styles.quickText}>Ask for Help</Text>
           </TouchableOpacity>
@@ -1260,9 +1490,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           <TouchableOpacity
             activeOpacity={0.9}
             style={[styles.card, styles.quickItem]}
-            onPress={() => navigation.navigate('PatientLocation', {
-              patientName,
-            })}
+            onPress={() =>
+              navigation.navigate("PatientLocation", {
+                patientName,
+              })
+            }
           >
             <MaterialIcons name="location-on" size={30} color={C.indigo500} />
             <Text style={styles.quickText}>Location</Text>
@@ -1279,7 +1511,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <View style={{ marginLeft: 12, flex: 1 }}>
               <Text style={styles.quickText}>Take Notes</Text>
               <Text style={styles.rowSmall}>
-                {notes.length === 0 ? 'No notes yet' : `${notes.length} note${notes.length > 1 ? 's' : ''} saved`}
+                {notes.length === 0
+                  ? "No notes yet"
+                  : `${notes.length} note${notes.length > 1 ? "s" : ""} saved`}
               </Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
@@ -1287,11 +1521,18 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         </View>
 
         {/* Upcoming Reminders */}
-        <View style={{ flexDirection: 'row', marginTop: 26, marginBottom: 12, paddingLeft: 27 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            marginTop: 26,
+            marginBottom: 12,
+            paddingLeft: 27,
+          }}
+        >
           <Text style={styles.sectionTitle2}>Upcoming Reminders (24h)</Text>
           <TouchableOpacity
             onPress={loadUpcomingReminders}
-            style={{ paddingRight: 22, paddingTop: 2}}
+            style={{ paddingRight: 22, paddingTop: 2 }}
           >
             <MaterialIcons name="refresh" size={24} color={C.indigo500} />
           </TouchableOpacity>
@@ -1310,37 +1551,145 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                 activeOpacity={0.75}
                 onPress={() => openReminder(reminder)}
               >
-                <View style={[styles.iconBox, { backgroundColor: reminder.chipBg }]}>
-                  <MaterialIcons name={reminder.icon as any} size={22} color={reminder.chipColor} />
+                <View
+                  style={[styles.iconBox, { backgroundColor: reminder.chipBg }]}
+                >
+                  <MaterialIcons
+                    name={reminder.icon as any}
+                    size={22}
+                    color={reminder.chipColor}
+                  />
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={styles.rowTitle2}>{reminder.title}</Text>
                   <Text style={styles.rowSmall2}>{reminder.subtitle}</Text>
                 </View>
-                <MaterialIcons name="chevron-right" size={22} color={C.slate400} />
+                <MaterialIcons
+                  name="chevron-right"
+                  size={22}
+                  color={C.slate400}
+                />
               </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyCard}>
-              <MaterialIcons name="event-available" size={48} color={C.slate400} />
+              <MaterialIcons
+                name="event-available"
+                size={48}
+                color={C.slate400}
+              />
               <Text style={styles.emptyTitle}>No Upcoming Reminders</Text>
-              <Text style={styles.emptySubtitle}>All clear for the next 24 hours!</Text>
+              <Text style={styles.emptySubtitle}>
+                All clear for the next 24 hours!
+              </Text>
             </View>
           )}
+        </View>
+
+        {/* Test Contextual Reminders */}
+        <View
+          style={{
+            flexDirection: "row",
+            marginTop: 26,
+            marginBottom: 12,
+            paddingLeft: 27,
+          }}
+        >
+          <Text style={styles.sectionTitle2}>Test Contextual Reminders</Text>
+        </View>
+        <View style={{ paddingHorizontal: 24 }}>
+          <View style={styles.card}>
+            <Text
+              style={{
+                fontFamily: "Poppins_400Regular",
+                fontSize: 13,
+                color: C.slate500,
+                marginBottom: 14,
+              }}
+            >
+              Upload a short video clip or record one with the camera to test
+              the contextual reminder system. The video will be analysed by the
+              backend and a relevant reminder will be returned.
+            </Text>
+            <TouchableOpacity
+              onPress={handleVideoOptionPress}
+              disabled={isUploadingVideo || isOpeningCamera}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor:
+                  isUploadingVideo || isOpeningCamera
+                    ? C.indigo300
+                    : C.indigo500,
+                borderRadius: 14,
+                paddingVertical: 13,
+                paddingHorizontal: 20,
+                gap: 8,
+              }}
+            >
+              {isUploadingVideo ? (
+                <ActivityIndicator size="small" color={C.white} />
+              ) : (
+                <MaterialIcons name="video-library" size={20} color={C.white} />
+              )}
+              <Text
+                style={{
+                  fontFamily: "Poppins_600SemiBold",
+                  fontSize: 15,
+                  color: C.white,
+                }}
+              >
+                {isUploadingVideo
+                  ? "Processing..."
+                  : isOpeningCamera
+                    ? "Opening Camera..."
+                    : "Upload or Record Video"}
+              </Text>
+            </TouchableOpacity>
+            {videoUploadResult !== null && (
+              <View
+                style={{
+                  marginTop: 14,
+                  backgroundColor: "#eef2ff",
+                  borderRadius: 12,
+                  padding: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: "Poppins_500Medium",
+                    fontSize: 13,
+                    color: C.indigo500,
+                  }}
+                >
+                  {videoUploadResult}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Daily Activity */}
         <SectionTitle>Daily Activity</SectionTitle>
         <View style={{ paddingHorizontal: 24 }}>
           <View style={[styles.card, styles.activityGrid]}>
-            <View style={[styles.activityItem, { backgroundColor: '#eef2ff' }]}>
-              <MaterialIcons name="directions-walk" size={36} color={C.indigo500} />
+            <View style={[styles.activityItem, { backgroundColor: "#eef2ff" }]}>
+              <MaterialIcons
+                name="directions-walk"
+                size={36}
+                color={C.indigo500}
+              />
               <Text style={styles.activityBig}>{steps.toLocaleString()}</Text>
               <Text style={styles.activitySub}>Steps</Text>
             </View>
 
-            <View style={[styles.activityItem, { backgroundColor: '#f0fdfa' }]}>
-              <MaterialIcons name="local-fire-department" size={36} color={C.teal500} />
+            <View style={[styles.activityItem, { backgroundColor: "#f0fdfa" }]}>
+              <MaterialIcons
+                name="local-fire-department"
+                size={36}
+                color={C.teal500}
+              />
               <Text style={styles.activityBig}>{activeMinutes}</Text>
               <Text style={styles.activitySub}>Active Mins</Text>
             </View>
@@ -1348,17 +1697,24 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         </View>
 
         {/* ✅ Recent Activity - NOW WITH DYNAMIC DATA */}
-        <View style={{ flexDirection: 'row', marginTop: 26, marginBottom: 12, paddingLeft: 27 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            marginTop: 26,
+            marginBottom: 12,
+            paddingLeft: 27,
+          }}
+        >
           <Text style={styles.sectionTitle2}>Recent Activity</Text>
           <TouchableOpacity
             onPress={loadRecentActivities}
             style={{ paddingRight: 22, paddingTop: 2 }}
             disabled={loadingActivities}
           >
-            <MaterialIcons 
-              name={loadingActivities ? "hourglass-empty" : "refresh"} 
-              size={24} 
-              color={C.indigo500} 
+            <MaterialIcons
+              name={loadingActivities ? "hourglass-empty" : "refresh"}
+              size={24}
+              color={C.indigo500}
             />
           </TouchableOpacity>
         </View>
@@ -1371,8 +1727,14 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           ) : recentActivities.length > 0 ? (
             recentActivities.map((activity) => (
               <View key={activity.id} style={styles.cardRow}>
-                <View style={[styles.iconBox, { backgroundColor: activity.iconBg }]}>
-                  <MaterialIcons name={activity.icon as any} size={24} color={activity.iconColor} />
+                <View
+                  style={[styles.iconBox, { backgroundColor: activity.iconBg }]}
+                >
+                  <MaterialIcons
+                    name={activity.icon as any}
+                    size={24}
+                    color={activity.iconColor}
+                  />
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={styles.rowTitleMed}>{activity.title}</Text>
@@ -1384,7 +1746,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             <View style={styles.emptyCard}>
               <MaterialIcons name="history" size={48} color={C.slate400} />
               <Text style={styles.emptyTitle}>No Recent Activity</Text>
-              <Text style={styles.emptySubtitle}>Your activities will appear here</Text>
+              <Text style={styles.emptySubtitle}>
+                Your activities will appear here
+              </Text>
             </View>
           )}
         </View>
@@ -1402,41 +1766,204 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         </View>
 
         {/* Medication Reminder Popup */}
-        <MedicationReminderPopup 
-          visible={showReminderNotification} 
+        <MedicationReminderPopup
+          visible={showReminderNotification}
           reminder={currentReminder}
           onClose={() => {
             setShowReminderNotification(false);
             setCurrentReminder(null);
-          }} 
+          }}
         />
-        
+
         {/* Contextual Reminder Popup */}
-        <ReminderPopup 
-          visible={showContextualReminder} 
-          onClose={() => setShowContextualReminder(false)} 
-          message={currentContextualReminder} 
+        <ReminderPopup
+          visible={showContextualReminder}
+          onClose={() => setShowContextualReminder(false)}
+          message={currentContextualReminder}
         />
       </ScrollView>
 
       {/* ✅ Face Recognition Popup */}
       {/* Fall Alert Popup */}
+      <Modal
+        visible={showVideoSourceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowVideoSourceModal(false)}
+      >
+        <View style={styles.videoModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowVideoSourceModal(false)}
+          />
+
+          <View style={styles.videoModalCard}>
+            <LinearGradient
+              colors={["#dbeafe", "#ede9fe"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.videoModalTop}
+            >
+              <Text style={styles.videoModalTitle}>Choose Video Source</Text>
+              <Text style={styles.videoModalSubtitle}>
+                Add a clip from your gallery or record one now.
+              </Text>
+            </LinearGradient>
+
+            <View style={styles.videoModalActions}>
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleChooseVideoUpload}
+                style={styles.videoActionBtn}
+              >
+                <View
+                  style={[
+                    styles.videoActionIconWrap,
+                    { backgroundColor: "#e0e7ff" },
+                  ]}
+                >
+                  <MaterialIcons
+                    name="video-library"
+                    size={22}
+                    color="#4f46e5"
+                  />
+                </View>
+                <View style={styles.videoActionTextWrap}>
+                  <Text style={styles.videoActionTitle}>Upload Video</Text>
+                  <Text style={styles.videoActionSubtitle}>
+                    Pick an existing clip
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleChooseVideoRecord}
+                style={styles.videoActionBtn}
+              >
+                <View
+                  style={[
+                    styles.videoActionIconWrap,
+                    { backgroundColor: "#dcfce7" },
+                  ]}
+                >
+                  <MaterialIcons name="videocam" size={22} color="#15803d" />
+                </View>
+                <View style={styles.videoActionTextWrap}>
+                  <Text style={styles.videoActionTitle}>
+                    Record with Camera
+                  </Text>
+                  <Text style={styles.videoActionSubtitle}>
+                    Capture a new clip
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.videoModalCancelBtn}
+                onPress={() => setShowVideoSourceModal(false)}
+              >
+                <Text style={styles.videoModalCancelText}>Not now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showRecordGuideModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRecordGuideModal(false)}
+      >
+        <View style={styles.videoModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowRecordGuideModal(false)}
+          />
+
+          <View style={styles.recordGuideCard}>
+            <Text style={styles.recordGuideTitle}>Record a Test Clip</Text>
+            <Text style={styles.recordGuideSubtitle}>
+              A short, steady recording helps generate a better reminder.
+            </Text>
+
+            <View style={styles.recordGuideTips}>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>Use good lighting</Text>
+              </View>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>
+                  Keep it between 5 and 20 seconds
+                </Text>
+              </View>
+              <View style={styles.recordGuideTipRow}>
+                <MaterialIcons name="check-circle" size={18} color="#22c55e" />
+                <Text style={styles.recordGuideTipText}>
+                  Keep the activity centered in frame
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleLaunchCameraFromGuide}
+              style={styles.recordGuidePrimaryBtn}
+            >
+              <LinearGradient
+                colors={["#16a34a", "#22c55e"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.recordGuidePrimaryFill}
+              >
+                <MaterialIcons name="videocam" size={20} color="#fff" />
+                <Text style={styles.recordGuidePrimaryText}>Open Camera</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setShowRecordGuideModal(false)}
+              style={styles.recordGuideSecondaryBtn}
+            >
+              <Text style={styles.recordGuideSecondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!fallAlert} transparent animationType="fade">
         <BlurView intensity={40} tint="dark" style={fallStyles.overlay}>
           <View style={fallStyles.centered}>
             <View style={fallStyles.cardContainer}>
-              <TouchableOpacity style={fallStyles.closeButton} onPress={() => setFallAlert(null)}>
-                <MaterialIcons name="close" size={30} color="rgba(255,255,255,0.8)" />
+              <TouchableOpacity
+                style={fallStyles.closeButton}
+                onPress={() => setFallAlert(null)}
+              >
+                <MaterialIcons
+                  name="close"
+                  size={30}
+                  color="rgba(255,255,255,0.8)"
+                />
               </TouchableOpacity>
 
               <LinearGradient
-                colors={['#f87171', '#f472b6']}
+                colors={["#f87171", "#f472b6"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={fallStyles.card}
               >
                 <View style={fallStyles.iconWrapper}>
-                  <MaterialIcons name="personal-injury" size={50} color="#fff" />
+                  <MaterialIcons
+                    name="personal-injury"
+                    size={50}
+                    color="#fff"
+                  />
                 </View>
 
                 <Text style={fallStyles.title}>FALL DETECTED</Text>
@@ -1446,13 +1973,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                 <Text style={fallStyles.timestamp}>
                   {fallAlert?.created_at
                     ? (() => {
-                        const date = new Date(fallAlert.created_at.endsWith('Z') ? fallAlert.created_at : `${fallAlert.created_at}Z`);
+                        const date = new Date(
+                          fallAlert.created_at.endsWith("Z")
+                            ? fallAlert.created_at
+                            : `${fallAlert.created_at}Z`,
+                        );
                         return `Timestamp: ${date.toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}, ${date.toLocaleDateString()}`;
                       })()
-                    : 'Timestamp: Just now'}
+                    : "Timestamp: Just now"}
                 </Text>
 
                 <View style={fallStyles.buttonGroup}>
@@ -1460,7 +1991,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                     style={fallStyles.primaryButton}
                     onPress={() => setFallAlert(null)}
                   >
-                    <MaterialIcons name="check-circle" size={22} color="#e11d48" />
+                    <MaterialIcons
+                      name="check-circle"
+                      size={22}
+                      color="#e11d48"
+                    />
                     <Text style={fallStyles.primaryText}>I'm OK</Text>
                   </TouchableOpacity>
 
@@ -1489,13 +2024,19 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       <Modal
         visible={showNotesModal}
         animationType="slide"
-        onRequestClose={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setShowNotesModal(false);
+        }}
       >
         <SafeAreaView style={notesStyles.screen}>
           {/* Header */}
           <View style={notesStyles.headerRow}>
             <TouchableOpacity
-              onPress={() => { Keyboard.dismiss(); setShowNotesModal(false); }}
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowNotesModal(false);
+              }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <MaterialIcons name="arrow-back" size={24} color={C.slate700} />
@@ -1510,7 +2051,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
           {/* Notes list — flex:1 fills all space between header and input bar */}
           <FlatList
             data={notes}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={notesStyles.listContent}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
@@ -1519,19 +2060,27 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               <View style={notesStyles.emptyState}>
                 <MaterialIcons name="notes" size={56} color={C.slate300} />
                 <Text style={notesStyles.emptyText}>No notes yet</Text>
-                <Text style={notesStyles.emptySubText}>Use the input below to add your first note</Text>
+                <Text style={notesStyles.emptySubText}>
+                  Use the input below to add your first note
+                </Text>
               </View>
             }
             renderItem={({ item: note }) => (
               <View style={notesStyles.noteCard}>
                 <Text style={notesStyles.noteText}>{note.text}</Text>
                 <View style={notesStyles.noteFooter}>
-                  <Text style={notesStyles.noteDate}>{formatNoteDate(note.createdAt)}</Text>
+                  <Text style={notesStyles.noteDate}>
+                    {formatNoteDate(note.createdAt)}
+                  </Text>
                   <TouchableOpacity
                     onPress={() => deleteNote(note.id)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <MaterialIcons name="delete-outline" size={18} color={C.slate400} />
+                    <MaterialIcons
+                      name="delete-outline"
+                      size={18}
+                      color={C.slate400}
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1540,17 +2089,20 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
           {/* Input bar pinned to the bottom */}
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
             <View style={notesStyles.inputBar}>
               {/* Mic button */}
               <TouchableOpacity
-                style={[notesStyles.micBtn, isRecording && notesStyles.micBtnActive]}
+                style={[
+                  notesStyles.micBtn,
+                  isRecording && notesStyles.micBtnActive,
+                ]}
                 onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
                 activeOpacity={0.8}
               >
                 <MaterialIcons
-                  name={isRecording ? 'stop' : 'mic'}
+                  name={isRecording ? "stop" : "mic"}
                   size={22}
                   color="#fff"
                 />
@@ -1568,7 +2120,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
               {/* Send button */}
               <TouchableOpacity
-                style={[notesStyles.saveBtn, !newNoteText.trim() && notesStyles.saveBtnDisabled]}
+                style={[
+                  notesStyles.saveBtn,
+                  !newNoteText.trim() && notesStyles.saveBtnDisabled,
+                ]}
                 onPress={saveNote}
                 disabled={!newNoteText.trim()}
                 activeOpacity={0.8}
@@ -1580,7 +2135,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
             {isRecording && (
               <View style={notesStyles.recordingBanner}>
                 <View style={notesStyles.recordingDot} />
-                <Text style={notesStyles.recordingText}>Recording… text appears every few seconds</Text>
+                <Text style={notesStyles.recordingText}>
+                  Recording… text appears every few seconds
+                </Text>
               </View>
             )}
           </KeyboardAvoidingView>
@@ -1595,7 +2152,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         onRequestClose={closeReminder}
       >
         <View style={modalStyles.overlayRoot} pointerEvents="box-none">
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <BlurView
+            intensity={30}
+            tint="dark"
+            style={StyleSheet.absoluteFillObject}
+          />
           <TouchableOpacity
             style={modalStyles.overlayTint}
             activeOpacity={1}
@@ -1627,7 +2188,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               </View>
               <View style={{ marginLeft: 12 }}>
                 <Text style={modalStyles.title}>{activeReminder?.title}</Text>
-                <Text style={modalStyles.subtitle}>{activeReminder?.subtitle}</Text>
+                <Text style={modalStyles.subtitle}>
+                  {activeReminder?.subtitle}
+                </Text>
               </View>
             </View>
 
@@ -1637,7 +2200,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
                 {activeReminder.details.medication && (
                   <View style={modalStyles.detailRow}>
-                    <MaterialIcons name="medication" size={20} color="#6366f1" />
+                    <MaterialIcons
+                      name="medication"
+                      size={20}
+                      color="#6366f1"
+                    />
                     <Text style={modalStyles.detailText}>
                       <Text style={modalStyles.detailLabel}>Medication: </Text>
                       {activeReminder.details.medication}
@@ -1647,9 +2214,15 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
                 {activeReminder.details.instructions && (
                   <View style={modalStyles.detailRow}>
-                    <MaterialIcons name="lunch-dining" size={20} color="#6366f1" />
+                    <MaterialIcons
+                      name="lunch-dining"
+                      size={20}
+                      color="#6366f1"
+                    />
                     <Text style={modalStyles.detailText}>
-                      <Text style={modalStyles.detailLabel}>Instructions: </Text>
+                      <Text style={modalStyles.detailLabel}>
+                        Instructions:{" "}
+                      </Text>
                       {activeReminder.details.instructions}
                     </Text>
                   </View>
@@ -1657,9 +2230,15 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
                 {activeReminder.details.note && (
                   <View style={modalStyles.detailRow}>
-                    <MaterialIcons name="speaker-notes" size={20} color="#6366f1" />
+                    <MaterialIcons
+                      name="speaker-notes"
+                      size={20}
+                      color="#6366f1"
+                    />
                     <Text style={modalStyles.detailText}>
-                      <Text style={modalStyles.detailLabel}>Caregiver Note: </Text>
+                      <Text style={modalStyles.detailLabel}>
+                        Caregiver Note:{" "}
+                      </Text>
                       {activeReminder.details.note}
                     </Text>
                   </View>
@@ -1679,13 +2258,22 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                           : "schedule"
                       }
                       size={22}
-                      color={activeReminder.status.label === "Confirmed" ? "#16a34a" : "#64748b"}
+                      color={
+                        activeReminder.status.label === "Confirmed"
+                          ? "#16a34a"
+                          : "#64748b"
+                      }
                       style={{ marginRight: 10 }}
                     />
                     <Text
                       style={[
                         modalStyles.statusMain,
-                        { color: activeReminder.status.label === "Confirmed" ? "#065f46" : "#334155" },
+                        {
+                          color:
+                            activeReminder.status.label === "Confirmed"
+                              ? "#065f46"
+                              : "#334155",
+                        },
                       ]}
                     >
                       {activeReminder.status.time || "—"}
@@ -1694,7 +2282,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                   <Text
                     style={[
                       modalStyles.statusRight,
-                      { color: activeReminder.status.label === "Confirmed" ? "#15803d" : "#64748b" },
+                      {
+                        color:
+                          activeReminder.status.label === "Confirmed"
+                            ? "#15803d"
+                            : "#64748b",
+                      },
                     ]}
                   >
                     {activeReminder.status.label || ""}
@@ -1716,18 +2309,22 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   );
 }
 
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Text style={styles.sectionTitle}>{children}</Text>
-);
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => <Text style={styles.sectionTitle}>{children}</Text>;
 
-const handleSignOut = async (navigation: Props['navigation']) => {
+const handleSignOut = async (navigation: Props["navigation"]) => {
   try {
-    await AsyncStorage.multiRemove(['role', 'userEmail', 'token']);
+    await AsyncStorage.multiRemove(["role", "userEmail", "token"]);
   } catch {}
-  navigation.replace('Login');
+  navigation.replace("Login");
 };
 
-const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?: string }> = ({ visible, onClose, message }) => {
+const ReminderPopup: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  message?: string;
+}> = ({ visible, onClose, message }) => {
   if (!visible) return null;
 
   const handleClose = () => {
@@ -1739,7 +2336,7 @@ const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?:
     <View style={styles.reminderScrim}>
       <View style={styles.reminderWrap}>
         <LinearGradient
-          colors={['#818cf8', '#a78bfa']}
+          colors={["#818cf8", "#a78bfa"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.reminderCCard}
@@ -1754,7 +2351,11 @@ const ReminderPopup: React.FC<{ visible: boolean; onClose: () => void; message?:
             {message || "You have a new reminder"}
           </Text>
 
-          <TouchableOpacity style={styles.reminderCta} activeOpacity={0.9} onPress={handleClose}>
+          <TouchableOpacity
+            style={styles.reminderCta}
+            activeOpacity={0.9}
+            onPress={handleClose}
+          >
             <Text style={styles.reminderCtaText}>Okay, got it</Text>
           </TouchableOpacity>
         </LinearGradient>
@@ -1772,20 +2373,20 @@ const styles = StyleSheet.create({
 
   headerWrap: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 56 : 32,
+    paddingTop: Platform.OS === "ios" ? 56 : 32,
     paddingBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   greetSmall: {
     marginTop: 9,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 14,
     color: C.slate500,
   },
   greetName: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 32,
     color: C.slate800,
     marginTop: -6,
@@ -1796,40 +2397,40 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     borderWidth: 2,
     borderColor: C.indigo300,
-    backgroundColor: '#818cf8',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#818cf8",
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 20,
-    color: '#fff',
+    color: "#fff",
   },
 
   callBtn: {
     borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#60a5fa',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#60a5fa",
     shadowOpacity: 0.35,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
   },
   callText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 18,
-    color: '#fff',
+    color: "#fff",
   },
 
   card: {
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 18,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -1839,54 +2440,54 @@ const styles = StyleSheet.create({
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
     marginBottom: 12,
   },
-  rowLeft: { flexDirection: 'row', alignItems: 'center' },
+  rowLeft: { flexDirection: "row", alignItems: "center" },
   iconBox: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   rowTitle: {
     marginLeft: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 16,
     color: C.slate700,
   },
   rowTitleMed: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
     color: C.slate700,
   },
   rowSub: {
     marginLeft: 8,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 14,
     color: C.slate500,
   },
   rowSmall: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 13,
     color: C.slate500,
   },
   rowTitle2: {
     marginLeft: 0,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 16,
     color: C.slate700,
   },
   rowSmall2: {
     marginLeft: 0,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 13,
     color: C.slate500,
   },
@@ -1902,12 +2503,12 @@ const styles = StyleSheet.create({
     marginTop: 26,
     marginBottom: 12,
     paddingHorizontal: 24,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 18,
     color: C.slate700,
   },
   sectionTitle2: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 18,
     color: C.slate700,
     flex: 1,
@@ -1915,25 +2516,25 @@ const styles = StyleSheet.create({
 
   quickGrid: {
     paddingHorizontal: 24,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   quickItem: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
   },
   quickText: {
     marginTop: 8,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 16,
     color: C.slate700,
   },
   notesQuickItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
     padding: 16,
   },
 
@@ -1941,10 +2542,10 @@ const styles = StyleSheet.create({
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -1955,8 +2556,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.white,
     borderRadius: 20,
     padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -1964,16 +2565,16 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     marginTop: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: C.slate600,
     fontSize: 16,
   },
   emptySubtitle: {
     marginTop: 4,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: C.slate400,
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   timePill: {
@@ -1981,49 +2582,49 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 32,
     backgroundColor: C.teal50,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   timeText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 13,
     color: C.teal500,
   },
 
   activityGrid: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   activityItem: {
     flex: 1,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
   },
   activityBig: {
     marginTop: 6,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 24,
     color: C.slate700,
   },
   activitySub: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 14,
     color: C.slate500,
   },
   signOutBtn: {
     marginLeft: 96,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
     height: 36,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#f8e2e2ff',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
+    borderColor: "#f8e2e2ff",
+    backgroundColor: "#fff",
+    shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
@@ -2032,38 +2633,188 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     marginLeft: 8,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 14,
-    color: '#df6666ff',
+    color: "#df6666ff",
+  },
+
+  videoModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2,6,23,0.45)",
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  videoModalCard: {
+    backgroundColor: C.white,
+    borderRadius: 22,
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  videoModalTop: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  videoModalTitle: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 18,
+    color: C.slate800,
+  },
+  videoModalSubtitle: {
+    marginTop: 4,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 13,
+    color: C.slate600,
+  },
+  videoModalActions: {
+    padding: 14,
+    gap: 10,
+  },
+  videoActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.slate300,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  videoActionIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoActionTextWrap: {
+    marginLeft: 10,
+  },
+  videoActionTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: C.slate800,
+  },
+  videoActionSubtitle: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    color: C.slate500,
+  },
+  videoModalCancelBtn: {
+    marginTop: 2,
+    borderWidth: 1,
+    borderColor: C.slate300,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+  videoModalCancelText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 14,
+    color: C.slate700,
+  },
+  recordGuideCard: {
+    backgroundColor: C.white,
+    borderRadius: 22,
+    padding: 18,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  recordGuideTitle: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 19,
+    color: C.slate800,
+    textAlign: "center",
+  },
+  recordGuideSubtitle: {
+    marginTop: 6,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    color: C.slate600,
+  },
+  recordGuideTips: {
+    marginTop: 14,
+    marginBottom: 16,
+    gap: 8,
+  },
+  recordGuideTipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  recordGuideTipText: {
+    marginLeft: 8,
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
+    color: C.slate700,
+  },
+  recordGuidePrimaryBtn: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  recordGuidePrimaryFill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+  },
+  recordGuidePrimaryText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: C.white,
+  },
+  recordGuideSecondaryBtn: {
+    marginTop: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+  },
+  recordGuideSecondaryText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 14,
+    color: C.slate500,
   },
 
   reminderOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 16,
   },
   reminderContainer: {
-    width: '100%',
+    width: "100%",
     maxWidth: 380,
   },
   reminderCardModern: {
     borderRadius: 28,
     padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6366F1',
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366F1",
     shadowOpacity: 0.3,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
   timerBadge: {
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.2)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -2071,9 +2822,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   timerText: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 12,
-    color: '#fff',
+    color: "#fff",
   },
   reminderIconOuter: {
     marginBottom: 16,
@@ -2082,83 +2833,83 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   reminderMainTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 22,
-    color: '#fff',
+    color: "#fff",
     marginBottom: 6,
-    textAlign: 'center',
+    textAlign: "center",
   },
   reminderMessage: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 16,
-    color: '#fff',
-    textAlign: 'center',
+    color: "#fff",
+    textAlign: "center",
     opacity: 0.95,
     marginBottom: 18,
     lineHeight: 24,
   },
   primaryBtn: {
-    width: '100%',
-    backgroundColor: '#fff',
+    width: "100%",
+    backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 10,
   },
   primaryBtnText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 17,
-    color: '#4f46e5',
+    color: "#4f46e5",
   },
   secondaryBtn: {
-    width: '100%',
+    width: "100%",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
     paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   secondaryBtnText: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
   },
   dismissBtn: {
-    width: '100%',
+    width: "100%",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: "rgba(255,255,255,0.3)",
     paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
   },
   dismissBtnText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
   },
-  
+
   reminderScrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 16,
   },
-  reminderWrap: { width: '100%', maxWidth: 380 },
+  reminderWrap: { width: "100%", maxWidth: 380 },
   reminderCCard: {
     borderRadius: 28,
     padding: 24,
-    alignItems: 'center',
-    shadowColor: '#818cf8',
+    alignItems: "center",
+    shadowColor: "#818cf8",
     shadowOpacity: 0.35,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
@@ -2168,41 +2919,41 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.30)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.30)",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
   },
   reminderTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 24,
-    color: '#fff',
+    color: "#fff",
     marginTop: 4,
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   reminderBody: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 18,
     lineHeight: 28,
-    color: '#ffffff',
+    color: "#ffffff",
     opacity: 0.95,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 18,
     paddingHorizontal: 6,
   },
   reminderCta: {
-    width: '100%',
-    backgroundColor: '#fff',
+    width: "100%",
+    backgroundColor: "#fff",
     borderRadius: 18,
     paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   reminderCtaText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 18,
-    color: '#4f46e5',
+    color: "#4f46e5",
   },
 });
 
@@ -2210,20 +2961,20 @@ const styles = StyleSheet.create({
 const fallStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   centered: {
-    width: '100%',
+    width: "100%",
     maxWidth: 400,
   },
   cardContainer: {
-    position: 'relative',
+    position: "relative",
   },
   closeButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 12,
     left: 12,
     zIndex: 10,
@@ -2232,93 +2983,93 @@ const fallStyles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 40,
     paddingHorizontal: 24,
-    alignItems: 'center',
-    shadowColor: '#f472b6',
+    alignItems: "center",
+    shadowColor: "#f472b6",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.5,
     shadowRadius: 25,
     elevation: 10,
   },
   iconWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: "rgba(255,255,255,0.3)",
     width: 90,
     height: 90,
     borderRadius: 45,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Poppins_700Bold',
-    color: '#fff',
+    fontFamily: "Poppins_700Bold",
+    color: "#fff",
     marginBottom: 8,
   },
   alertText: {
     fontSize: 18,
-    color: '#fff',
-    textAlign: 'center',
+    color: "#fff",
+    textAlign: "center",
     marginBottom: 4,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
   },
   timestamp: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
     marginBottom: 28,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
   },
   buttonGroup: {
-    width: '100%',
+    width: "100%",
     gap: 10,
   },
   primaryButton: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
   },
   primaryText: {
-    color: '#e11d48',
+    color: "#e11d48",
     fontSize: 17,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
   },
   secondaryButton: {
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.8)',
+    borderColor: "rgba(255,255,255,0.8)",
     borderRadius: 20,
     paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
   },
   secondaryText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
   },
 });
 
 const faceStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 24,
   },
   popupContainer: {
-    width: '100%',
+    width: "100%",
     maxWidth: 380,
   },
   popup: {
     borderRadius: 28,
     padding: 32,
-    alignItems: 'center',
-    shadowColor: '#34d399',
+    alignItems: "center",
+    shadowColor: "#34d399",
     shadowOpacity: 0.4,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
@@ -2329,7 +3080,7 @@ const faceStyles = StyleSheet.create({
     height: 128,
     borderRadius: 64,
     borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
     marginBottom: 20,
   },
   faceImagePlaceholder: {
@@ -2337,57 +3088,57 @@ const faceStyles = StyleSheet.create({
     height: 128,
     borderRadius: 64,
     borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
     marginBottom: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   subtitle: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.8,
     marginBottom: 4,
   },
   name: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 36,
-    color: '#fff',
+    color: "#fff",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   relationship: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 20,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.9,
     marginBottom: 16,
   },
   confidence: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 14,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.7,
     marginBottom: 16,
   },
   dismissButton: {
-    width: '100%',
-    backgroundColor: '#fff',
+    width: "100%",
+    backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
   dismissText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 18,
     color: C.emerald500,
   },
@@ -2396,105 +3147,105 @@ const faceStyles = StyleSheet.create({
 const modalStyles = StyleSheet.create({
   overlayRoot: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
   overlayTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.40)',
+    backgroundColor: "rgba(0,0,0,0.40)",
   },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 20,
     paddingBottom: 24,
     paddingTop: 6,
   },
-  handleWrap: { 
-    alignItems: 'center', 
-    paddingVertical: 10 
+  handleWrap: {
+    alignItems: "center",
+    paddingVertical: 10,
   },
-  handle: { 
-    width: 56, 
-    height: 6, 
-    borderRadius: 3, 
-    backgroundColor: '#cbd5e1' 
-  },
-
-  headerRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 8 
-  },
-  title: { 
-    fontFamily: 'Poppins_700Bold', 
-    fontSize: 22, 
-    color: '#1e293b' 
-  },
-  subtitle: { 
-    fontFamily: 'Poppins_400Regular', 
-    fontSize: 14, 
-    color: '#64748b' 
+  handle: {
+    width: 56,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#cbd5e1",
   },
 
-  section: { 
-    borderTopWidth: 1, 
-    borderTopColor: '#e2e8f0', 
-    paddingTop: 16, 
-    marginTop: 16 
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
   },
-  sectionTitle: { 
-    fontFamily: 'Poppins_600SemiBold', 
-    color: '#475569', 
-    marginBottom: 10 
+  title: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 22,
+    color: "#1e293b",
+  },
+  subtitle: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 14,
+    color: "#64748b",
   },
 
-  detailRow: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-start', 
-    marginBottom: 8, 
-    gap: 12 
+  section: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 16,
+    marginTop: 16,
   },
-  detailText: { 
-    flex: 1, 
-    color: '#334155', 
-    fontFamily: 'Poppins_400Regular', 
-    fontSize: 14 
+  sectionTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    color: "#475569",
+    marginBottom: 10,
   },
-  detailLabel: { 
-    fontFamily: 'Poppins_500Medium', 
-    color: '#334155' 
+
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    gap: 12,
+  },
+  detailText: {
+    flex: 1,
+    color: "#334155",
+    fontFamily: "Poppins_400Regular",
+    fontSize: 14,
+  },
+  detailLabel: {
+    fontFamily: "Poppins_500Medium",
+    color: "#334155",
   },
 
   statusCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 14,
     borderRadius: 14,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: "#ecfdf5",
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: "#bbf7d0",
   },
-  statusMain: { 
-    fontFamily: 'Poppins_600SemiBold', 
-    fontSize: 15 
+  statusMain: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
   },
-  statusRight: { 
-    fontFamily: 'Poppins_500Medium', 
-    fontSize: 13 
+  statusRight: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
   },
 
   closeBtn: {
-    backgroundColor: '#6366f1',
+    backgroundColor: "#6366f1",
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 18,
   },
   closeText: {
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#fff',
+    fontFamily: "Poppins_600SemiBold",
+    color: "#fff",
     fontSize: 16,
   },
 });
@@ -2502,25 +3253,25 @@ const modalStyles = StyleSheet.create({
 const notesStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: "#e2e8f0",
   },
   headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   title: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     fontSize: 20,
     color: C.slate800,
   },
@@ -2530,117 +3281,117 @@ const notesStyles = StyleSheet.create({
     flexGrow: 1,
   },
   emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingTop: 80,
   },
   emptyText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     fontSize: 16,
     color: C.slate500,
     marginTop: 16,
   },
   emptySubText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 13,
     color: C.slate400,
     marginTop: 6,
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: 32,
   },
   noteCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderLeftWidth: 3,
     borderLeftColor: C.indigo500,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   noteText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 15,
     color: C.slate700,
     lineHeight: 22,
   },
   noteFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 10,
   },
   noteDate: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 11,
     color: C.slate400,
   },
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: 8,
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === "ios" ? 24 : 12,
+    backgroundColor: "#fff",
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: "#e2e8f0",
   },
   micBtn: {
     width: 46,
     height: 46,
     borderRadius: 23,
     backgroundColor: C.indigo500,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   micBtnActive: {
-    backgroundColor: '#ef4444',
+    backgroundColor: "#ef4444",
   },
   input: {
     flex: 1,
     minHeight: 46,
     maxHeight: 120,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: 15,
     color: C.slate800,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
   saveBtn: {
     width: 46,
     height: 46,
     borderRadius: 23,
     backgroundColor: C.indigo500,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnDisabled: {
     backgroundColor: C.slate300,
   },
   recordingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     paddingVertical: 8,
-    backgroundColor: '#fef2f2',
+    backgroundColor: "#fef2f2",
   },
   recordingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ef4444',
+    backgroundColor: "#ef4444",
   },
   recordingText: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 13,
-    color: '#ef4444',
+    color: "#ef4444",
   },
 });

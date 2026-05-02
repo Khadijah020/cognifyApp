@@ -40,36 +40,6 @@ const ITEM_HEIGHT = 50;
 const WHEEL_HEIGHT = 200;
 const WHEEL_PADDING = (WHEEL_HEIGHT - ITEM_HEIGHT) / 2;
 
-const originalWarn = console.warn;
-const originalError = console.error;
-
-console.warn = (...args) => {
-  const m = args[0]?.toString?.() || '';
-  if (
-    m.includes('expo-notifications') ||
-    m.includes('Android Push notifications') ||
-    m.includes('remote notifications') ||
-    m.includes('development build')
-  )
-    return;
-  originalWarn(...args);
-};
-
-console.error = (...args) => {
-  const m = args[0]?.toString?.() || '';
-  if (m.includes('expo-notifications') || m.includes('Android Push notifications')) return;
-  originalError(...args);
-};
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddReminder'>;
 

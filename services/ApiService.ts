@@ -45,7 +45,7 @@ export class ApiService {
    */
   static getNgrokUrl(): string {
     const url = cachedNgrokUrl || DEFAULT_NGROK_URL;
-    console.log('📡 getNgrokUrl() returning:', url);
+    //console.log('📡 getNgrokUrl() returning:', url);
     return url;
   }
 
@@ -56,7 +56,7 @@ export class ApiService {
     const baseUrl = this.getNgrokUrl();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const fullUrl = `${baseUrl}${cleanPath}`;
-    console.log('🔗 getApiEndpoint:', fullUrl);
+    //console.log('🔗 getApiEndpoint:', fullUrl);
     return fullUrl;
   }
 
