@@ -200,8 +200,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [showVideoSourceModal, setShowVideoSourceModal] = useState(false);
   const [showRecordGuideModal, setShowRecordGuideModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribingNote, setIsTranscribingNote] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isStoppingRef = useRef(false);
 
   // Modal animation
@@ -407,7 +407,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     );
   };
 
-  const M4A_OPTIONS: Audio.RecordingOptions = {
+  const ANDROID_M4A_OPTIONS: Audio.RecordingOptions = {
     isMeteringEnabled: false,
     android: {
       extension: ".m4a",
@@ -417,23 +417,67 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       numberOfChannels: 1,
       bitRate: 64000,
     },
-    ios: {
-      extension: ".m4a",
-      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-      audioQuality: Audio.IOSAudioQuality.MEDIUM,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 64000,
-      linearPCMBitDepth: 16,
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
-    },
-    web: {},
+    ios: Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
+    web: Audio.RecordingOptionsPresets.HIGH_QUALITY.web,
   };
 
-  const processChunk = async (uri: string) => {
+  const IOS_M4A_OPTIONS: Audio.RecordingOptions =
+    Audio.RecordingOptionsPresets.HIGH_QUALITY;
+
+  const logIOSVoiceNote = (message: string, details?: unknown) => {
+    if (Platform.OS !== "ios") return;
+
+    if (details === undefined) {
+      console.log(`[VoiceNote:iOS] ${message}`);
+      return;
+    }
+
+    console.log(`[VoiceNote:iOS] ${message}`, details);
+  };
+
+  const formatRecordingError = (error: unknown) => {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message };
+    }
+
+    return error;
+  };
+
+  const createVoiceNoteRecording = async () => {
+    if (Platform.OS !== "ios") {
+      return Audio.Recording.createAsync(ANDROID_M4A_OPTIONS);
+    }
+
+    logIOSVoiceNote("Creating recorder with HIGH_QUALITY preset", {
+      extension: IOS_M4A_OPTIONS.ios.extension,
+      sampleRate: IOS_M4A_OPTIONS.ios.sampleRate,
+      channels: IOS_M4A_OPTIONS.ios.numberOfChannels,
+      bitRate: IOS_M4A_OPTIONS.ios.bitRate,
+    });
+
+    try {
+      return await Audio.Recording.createAsync(IOS_M4A_OPTIONS);
+    } catch (error) {
+      logIOSVoiceNote(
+        "HIGH_QUALITY prepare failed, trying LOW_QUALITY preset",
+        formatRecordingError(error),
+      );
+
+      return Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.LOW_QUALITY,
+      );
+    }
+  };
+
+  const processVoiceNote = async (uri: string) => {
+    logIOSVoiceNote("Sending completed recording for STT", { uri });
+    setIsTranscribingNote(true);
     try {
       const result = await ApiService.sendAudioForSTT(uri);
+      logIOSVoiceNote("STT response received", {
+        hasTranscript: Boolean(result.transcript?.trim()),
+        transcriptLength: result.transcript?.length ?? 0,
+      });
       if (result.transcript?.trim()) {
         setNewNoteText((prev) => {
           const t = prev.trim();
@@ -443,63 +487,113 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         });
       }
     } catch (err) {
-      console.log("STT chunk error:", err);
-    }
-  };
-
-  const recordChunk = async () => {
-    if (isStoppingRef.current) return;
-    if (recordingRef.current) {
-      const prev = recordingRef.current;
-      recordingRef.current = null;
-      try {
-        await prev.stopAndUnloadAsync();
-        const uri = prev.getURI();
-        if (uri) processChunk(uri);
-      } catch (_) {}
-    }
-    if (isStoppingRef.current) return;
-    try {
-      const { recording } = await Audio.Recording.createAsync(M4A_OPTIONS);
-      recordingRef.current = recording;
-    } catch (err) {
-      console.log("Recording start error:", err);
+      logIOSVoiceNote("STT request failed", formatRecordingError(err));
+      console.log("STT note error:", err);
+    } finally {
+      setIsTranscribingNote(false);
     }
   };
 
   const startVoiceRecording = async () => {
-    const { granted } = await Audio.requestPermissionsAsync();
-    if (!granted) {
+    logIOSVoiceNote("Start pressed", {
+      hasActiveRecording: Boolean(recordingRef.current),
+      isStopping: isStoppingRef.current,
+      isTranscribingNote,
+    });
+
+    if (recordingRef.current || isStoppingRef.current || isTranscribingNote) {
+      logIOSVoiceNote("Start ignored because recorder is busy");
+      return;
+    }
+
+    logIOSVoiceNote("Requesting microphone permission");
+    const permission = await Audio.requestPermissionsAsync();
+    logIOSVoiceNote("Microphone permission result", {
+      granted: permission.granted,
+      status: permission.status,
+      canAskAgain: permission.canAskAgain,
+    });
+
+    if (!permission.granted) {
       Alert.alert(
         "Permission needed",
         "Microphone access is required to use voice notes.",
       );
       return;
     }
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-    isStoppingRef.current = false;
-    setIsRecording(true);
-    await recordChunk();
-    chunkTimerRef.current = setInterval(recordChunk, 4000);
+
+    try {
+      logIOSVoiceNote("Setting audio mode for recording");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      logIOSVoiceNote("Audio mode set");
+      isStoppingRef.current = false;
+      const { recording, status } = await createVoiceNoteRecording();
+      recordingRef.current = recording;
+      setIsRecording(true);
+      logIOSVoiceNote("Recording started", {
+        canRecord: status.canRecord,
+        isRecording: status.isRecording,
+        durationMillis: status.durationMillis,
+        uri: recording.getURI(),
+      });
+    } catch (err) {
+      recordingRef.current = null;
+      setIsRecording(false);
+      logIOSVoiceNote("Recording start failed", formatRecordingError(err));
+      console.log("Recording start error:", err);
+    }
   };
 
   const stopVoiceRecording = async () => {
+    logIOSVoiceNote("Stop pressed", {
+      hasActiveRecording: Boolean(recordingRef.current),
+      isStopping: isStoppingRef.current,
+    });
+
+    if (isStoppingRef.current) return;
+
     isStoppingRef.current = true;
     setIsRecording(false);
-    if (chunkTimerRef.current) {
-      clearInterval(chunkTimerRef.current);
-      chunkTimerRef.current = null;
+    const recording = recordingRef.current;
+    recordingRef.current = null;
+
+    if (!recording) {
+      logIOSVoiceNote("Stop ignored because no active recorder exists");
+      isStoppingRef.current = false;
+      return;
     }
-    if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-        const uri = recordingRef.current.getURI();
-        recordingRef.current = null;
-        if (uri) await processChunk(uri);
-      } catch (_) {}
+
+    try {
+      if (Platform.OS === "ios") {
+        const statusBeforeStop = await recording.getStatusAsync();
+        logIOSVoiceNote("Stopping recorder", {
+          canRecord: statusBeforeStop.canRecord,
+          isRecording: statusBeforeStop.isRecording,
+          durationMillis: statusBeforeStop.durationMillis,
+        });
+      }
+
+      const stopStatus = await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      logIOSVoiceNote("Recorder stopped", {
+        durationMillis: stopStatus.durationMillis,
+        uri,
+      });
+      if (uri) await processVoiceNote(uri);
+      if (!uri) logIOSVoiceNote("Recorder stopped without a file URI");
+    } catch (err) {
+      logIOSVoiceNote("Recording stop failed", formatRecordingError(err));
+      console.log("Recording stop error:", err);
+    } finally {
+      isStoppingRef.current = false;
+      Audio.setAudioModeAsync({ allowsRecordingIOS: false })
+        .then(() => logIOSVoiceNote("Audio mode reset after recording"))
+        .catch((err) =>
+          logIOSVoiceNote("Audio mode reset failed", formatRecordingError(err)),
+        );
     }
   };
 
@@ -2099,6 +2193,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                   isRecording && notesStyles.micBtnActive,
                 ]}
                 onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+                disabled={isTranscribingNote}
                 activeOpacity={0.8}
               >
                 <MaterialIcons
@@ -2132,11 +2227,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            {isRecording && (
+            {(isRecording || isTranscribingNote) && (
               <View style={notesStyles.recordingBanner}>
                 <View style={notesStyles.recordingDot} />
                 <Text style={notesStyles.recordingText}>
-                  Recording… text appears every few seconds
+                  {isRecording ? "Recording..." : "Transcribing..."}
                 </Text>
               </View>
             )}
