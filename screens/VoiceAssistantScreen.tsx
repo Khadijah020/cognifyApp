@@ -388,7 +388,12 @@ export default function VoiceAssistantScreen({ navigation }: Props) {
     }
 
     stopPollingForSteps();
-    navigation.goBack();
+    // If there's no back route (development warning), navigate to PatientDashboard
+    if (navigation.canGoBack && navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate("PatientDashboard");
+    }
   };
 
   if (!fontsLoaded) {
