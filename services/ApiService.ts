@@ -146,7 +146,7 @@ export class ApiService {
       const formData = new FormData();
       formData.append('file', {
         uri: audioUri,
-        type: 'audio/m4a',
+        type: 'audio/mp4',
         name: 'voice_recording.m4a',
       } as any);
 
@@ -154,7 +154,6 @@ export class ApiService {
         method: 'POST',
         body: formData,
         headers: {
-          'Content-Type': 'multipart/form-data',
           'ngrok-skip-browser-warning': 'true',
         },
       });

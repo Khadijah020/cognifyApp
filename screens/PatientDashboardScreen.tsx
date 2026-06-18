@@ -84,10 +84,22 @@ type RecognizedFace = {
 };
 
 type FaceRecognitionData = {
-  name: string;
-  relationship: string;
-  confidence: number;
-  timestamp: string;
+  id?: string;
+  name?: string;
+  relationship?: string;
+  confidence?: number;
+  timestamp?: string;
+  match?: {
+    id?: string | null;
+    name?: string;
+    relationship?: string | null;
+    confidence?: number;
+  } | null;
+};
+
+type FacePopupItem = RecognizedFace & {
+  confidence?: number;
+  timestamp?: string;
 };
 
 type Note = {
@@ -141,6 +153,33 @@ const AVATAR =
 
 const STORAGE_KEY = "cognify_recognized_faces";
 const FALL_ALERT_COOLDOWN_MS = 2 * 60 * 1000;
+const FACE_RECOGNITION_COOLDOWN_MS = 60 * 60 * 1000;
+
+const normalizeFaceText = (value?: string | null) =>
+  (value || "").trim().toLowerCase();
+
+const getFaceIdentityKey = (face: { id?: string | null; name?: string | null }) =>
+  normalizeFaceText(face.id) || normalizeFaceText(face.name);
+
+const mergeFacePopupItems = (
+  currentFaces: FacePopupItem[],
+  incomingFaces: FacePopupItem[],
+) => {
+  const byIdentity = new Map<string, FacePopupItem>();
+
+  for (const face of currentFaces) {
+    const key = getFaceIdentityKey(face);
+    if (key) byIdentity.set(key, face);
+  }
+
+  for (const face of incomingFaces) {
+    const key = getFaceIdentityKey(face);
+    if (!key) continue;
+    byIdentity.set(key, { ...byIdentity.get(key), ...face });
+  }
+
+  return Array.from(byIdentity.values());
+};
 
 export default function PatientDashboardScreen({ navigation }: Props) {
   const [fontsLoaded] = useFonts({
@@ -175,9 +214,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   );
 
   // ✅ Face recognition popup state
-  const [recognizedFace, setRecognizedFace] = useState<
-    (RecognizedFace & { confidence?: number }) | null
-  >(null);
+  const [recognizedFaceBatch, setRecognizedFaceBatch] = useState<
+    FacePopupItem[]
+  >([]);
   const [showFacePopup, setShowFacePopup] = useState(false);
   const [localFaces, setLocalFaces] = useState<RecognizedFace[]>([]);
 
@@ -200,8 +239,8 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [showVideoSourceModal, setShowVideoSourceModal] = useState(false);
   const [showRecordGuideModal, setShowRecordGuideModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribingNote, setIsTranscribingNote] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isStoppingRef = useRef(false);
 
   // Modal animation
@@ -209,6 +248,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const sheetHeight = useRef(0);
   const DRAG_CLOSE_THRESHOLD = 120;
   const shownFallAlertsRef = useRef<Map<string, number>>(new Map());
+  const isPollingFaceRecognitionRef = useRef(false);
 
   // ✅ Face popup animation
   const facePopupScale = useRef(new Animated.Value(0)).current;
@@ -407,7 +447,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     );
   };
 
-  const M4A_OPTIONS: Audio.RecordingOptions = {
+  const ANDROID_M4A_OPTIONS: Audio.RecordingOptions = {
     isMeteringEnabled: false,
     android: {
       extension: ".m4a",
@@ -417,23 +457,67 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       numberOfChannels: 1,
       bitRate: 64000,
     },
-    ios: {
-      extension: ".m4a",
-      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-      audioQuality: Audio.IOSAudioQuality.MEDIUM,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 64000,
-      linearPCMBitDepth: 16,
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
-    },
-    web: {},
+    ios: Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
+    web: Audio.RecordingOptionsPresets.HIGH_QUALITY.web,
   };
 
-  const processChunk = async (uri: string) => {
+  const IOS_M4A_OPTIONS: Audio.RecordingOptions =
+    Audio.RecordingOptionsPresets.HIGH_QUALITY;
+
+  const logIOSVoiceNote = (message: string, details?: unknown) => {
+    if (Platform.OS !== "ios") return;
+
+    if (details === undefined) {
+      console.log(`[VoiceNote:iOS] ${message}`);
+      return;
+    }
+
+    console.log(`[VoiceNote:iOS] ${message}`, details);
+  };
+
+  const formatRecordingError = (error: unknown) => {
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message };
+    }
+
+    return error;
+  };
+
+  const createVoiceNoteRecording = async () => {
+    if (Platform.OS !== "ios") {
+      return Audio.Recording.createAsync(ANDROID_M4A_OPTIONS);
+    }
+
+    logIOSVoiceNote("Creating recorder with HIGH_QUALITY preset", {
+      extension: IOS_M4A_OPTIONS.ios.extension,
+      sampleRate: IOS_M4A_OPTIONS.ios.sampleRate,
+      channels: IOS_M4A_OPTIONS.ios.numberOfChannels,
+      bitRate: IOS_M4A_OPTIONS.ios.bitRate,
+    });
+
+    try {
+      return await Audio.Recording.createAsync(IOS_M4A_OPTIONS);
+    } catch (error) {
+      logIOSVoiceNote(
+        "HIGH_QUALITY prepare failed, trying LOW_QUALITY preset",
+        formatRecordingError(error),
+      );
+
+      return Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.LOW_QUALITY,
+      );
+    }
+  };
+
+  const processVoiceNote = async (uri: string) => {
+    logIOSVoiceNote("Sending completed recording for STT", { uri });
+    setIsTranscribingNote(true);
     try {
       const result = await ApiService.sendAudioForSTT(uri);
+      logIOSVoiceNote("STT response received", {
+        hasTranscript: Boolean(result.transcript?.trim()),
+        transcriptLength: result.transcript?.length ?? 0,
+      });
       if (result.transcript?.trim()) {
         setNewNoteText((prev) => {
           const t = prev.trim();
@@ -443,71 +527,123 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         });
       }
     } catch (err) {
-      console.log("STT chunk error:", err);
-    }
-  };
-
-  const recordChunk = async () => {
-    if (isStoppingRef.current) return;
-    if (recordingRef.current) {
-      const prev = recordingRef.current;
-      recordingRef.current = null;
-      try {
-        await prev.stopAndUnloadAsync();
-        const uri = prev.getURI();
-        if (uri) processChunk(uri);
-      } catch (_) {}
-    }
-    if (isStoppingRef.current) return;
-    try {
-      const { recording } = await Audio.Recording.createAsync(M4A_OPTIONS);
-      recordingRef.current = recording;
-    } catch (err) {
-      console.log("Recording start error:", err);
+      logIOSVoiceNote("STT request failed", formatRecordingError(err));
+      console.log("STT note error:", err);
+    } finally {
+      setIsTranscribingNote(false);
     }
   };
 
   const startVoiceRecording = async () => {
-    const { granted } = await Audio.requestPermissionsAsync();
-    if (!granted) {
+    logIOSVoiceNote("Start pressed", {
+      hasActiveRecording: Boolean(recordingRef.current),
+      isStopping: isStoppingRef.current,
+      isTranscribingNote,
+    });
+
+    if (recordingRef.current || isStoppingRef.current || isTranscribingNote) {
+      logIOSVoiceNote("Start ignored because recorder is busy");
+      return;
+    }
+
+    logIOSVoiceNote("Requesting microphone permission");
+    const permission = await Audio.requestPermissionsAsync();
+    logIOSVoiceNote("Microphone permission result", {
+      granted: permission.granted,
+      status: permission.status,
+      canAskAgain: permission.canAskAgain,
+    });
+
+    if (!permission.granted) {
       Alert.alert(
         "Permission needed",
         "Microphone access is required to use voice notes.",
       );
       return;
     }
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-    isStoppingRef.current = false;
-    setIsRecording(true);
-    await recordChunk();
-    chunkTimerRef.current = setInterval(recordChunk, 4000);
+
+    try {
+      logIOSVoiceNote("Setting audio mode for recording");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      logIOSVoiceNote("Audio mode set");
+      isStoppingRef.current = false;
+      const { recording, status } = await createVoiceNoteRecording();
+      recordingRef.current = recording;
+      setIsRecording(true);
+      logIOSVoiceNote("Recording started", {
+        canRecord: status.canRecord,
+        isRecording: status.isRecording,
+        durationMillis: status.durationMillis,
+        uri: recording.getURI(),
+      });
+    } catch (err) {
+      recordingRef.current = null;
+      setIsRecording(false);
+      logIOSVoiceNote("Recording start failed", formatRecordingError(err));
+      console.log("Recording start error:", err);
+    }
   };
 
   const stopVoiceRecording = async () => {
+    logIOSVoiceNote("Stop pressed", {
+      hasActiveRecording: Boolean(recordingRef.current),
+      isStopping: isStoppingRef.current,
+    });
+
+    if (isStoppingRef.current) return;
+
     isStoppingRef.current = true;
     setIsRecording(false);
-    if (chunkTimerRef.current) {
-      clearInterval(chunkTimerRef.current);
-      chunkTimerRef.current = null;
+    const recording = recordingRef.current;
+    recordingRef.current = null;
+
+    if (!recording) {
+      logIOSVoiceNote("Stop ignored because no active recorder exists");
+      isStoppingRef.current = false;
+      return;
     }
-    if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-        const uri = recordingRef.current.getURI();
-        recordingRef.current = null;
-        if (uri) await processChunk(uri);
-      } catch (_) {}
+
+    try {
+      if (Platform.OS === "ios") {
+        const statusBeforeStop = await recording.getStatusAsync();
+        logIOSVoiceNote("Stopping recorder", {
+          canRecord: statusBeforeStop.canRecord,
+          isRecording: statusBeforeStop.isRecording,
+          durationMillis: statusBeforeStop.durationMillis,
+        });
+      }
+
+      const stopStatus = await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      logIOSVoiceNote("Recorder stopped", {
+        durationMillis: stopStatus.durationMillis,
+        uri,
+      });
+      if (uri) await processVoiceNote(uri);
+      if (!uri) logIOSVoiceNote("Recorder stopped without a file URI");
+    } catch (err) {
+      logIOSVoiceNote("Recording stop failed", formatRecordingError(err));
+      console.log("Recording stop error:", err);
+    } finally {
+      isStoppingRef.current = false;
+      Audio.setAudioModeAsync({ allowsRecordingIOS: false })
+        .then(() => logIOSVoiceNote("Audio mode reset after recording"))
+        .catch((err) =>
+          logIOSVoiceNote("Audio mode reset failed", formatRecordingError(err)),
+        );
     }
   };
 
   // ✅ Animate face popup in
-  const showFaceRecognitionPopup = (
-    face: RecognizedFace & { confidence?: number },
-  ) => {
-    setRecognizedFace(face);
+  const showFaceRecognitionPopup = (faces: FacePopupItem[]) => {
+    if (faces.length === 0) return;
+
+    setRecognizedFaceBatch((currentFaces) =>
+      mergeFacePopupItems(currentFaces, faces),
+    );
     setShowFacePopup(true);
 
     facePopupScale.setValue(0.8);
@@ -543,9 +679,114 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       }),
     ]).start(() => {
       setShowFacePopup(false);
-      setRecognizedFace(null);
+      setRecognizedFaceBatch([]);
     });
   };
+
+  const extractFaceBatchFromResponse = (response: any): FaceRecognitionData[] => {
+    const candidateLists = [
+      response?.faces,
+      response?.recognized_faces,
+      response?.face_recognitions,
+      response?.face_result,
+      response?.face_recognition?.faces,
+      response?.recognition?.faces,
+    ];
+
+    const faces = candidateLists.find(Array.isArray);
+    return faces || [];
+  };
+
+  const findLocalFace = (faceData: FaceRecognitionData) => {
+    const match = faceData.match;
+    const incomingId = normalizeFaceText(faceData.id || match?.id);
+    const incomingName = normalizeFaceText(faceData.name || match?.name);
+
+    return localFaces.find((face) => {
+      const sameId = incomingId && normalizeFaceText(face.id) === incomingId;
+      const sameName =
+        incomingName && normalizeFaceText(face.name) === incomingName;
+      return sameId || sameName;
+    });
+  };
+
+  const handleRecognizedFaceBatch = async (
+    incomingFaces: FaceRecognitionData[],
+  ) => {
+    if (!Array.isArray(incomingFaces) || incomingFaces.length === 0) return;
+
+    const pendingFaces: FacePopupItem[] = [];
+    const seenInBatch = new Set<string>();
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
+    for (const faceData of incomingFaces) {
+      const match = faceData.match;
+      const name = (faceData.name || match?.name || "").trim();
+      if (!name) continue;
+
+      const backendId = faceData.id || match?.id || undefined;
+      const relationship =
+        (faceData.relationship || match?.relationship || "known person").trim();
+      const identityKey = getFaceIdentityKey({ id: backendId, name });
+
+      if (!identityKey || seenInBatch.has(identityKey)) continue;
+      seenInBatch.add(identityKey);
+
+      const cooldownKey = `face_shown_${identityKey}`;
+      const lastShownTime = await AsyncStorage.getItem(cooldownKey);
+
+      if (lastShownTime) {
+        const timeSinceShown = now - parseInt(lastShownTime, 10);
+
+        if (timeSinceShown < FACE_RECOGNITION_COOLDOWN_MS) {
+          console.log(
+            `Skipping ${name} - shown ${Math.round(timeSinceShown / 60000)} minutes ago`,
+          );
+          continue;
+        }
+      }
+
+      const localFace = findLocalFace(faceData);
+      const popupFace: FacePopupItem = {
+        id: localFace?.id || backendId || `${identityKey}_${now}`,
+        name: localFace?.name || name,
+        relationship: localFace?.relationship || relationship,
+        imageUri: localFace?.imageUri || "",
+        dateAdded: localFace?.dateAdded || nowIso,
+        confidence: faceData.confidence ?? match?.confidence,
+        timestamp: faceData.timestamp || nowIso,
+      };
+
+      pendingFaces.push(popupFace);
+      await AsyncStorage.setItem(cooldownKey, now.toString());
+    }
+
+    if (pendingFaces.length === 0) return;
+
+    showFaceRecognitionPopup(pendingFaces);
+
+    if (voiceAlertsEnabled) {
+      const message =
+        pendingFaces.length === 1
+          ? `Hello! ${pendingFaces[0].name}, your ${pendingFaces[0].relationship}, is here.`
+          : `Hello! ${pendingFaces.map((face) => face.name).join(", ")} are here.`;
+
+      Speech.speak(message, {
+        language: "en-US",
+        pitch: 1.0,
+        rate: 0.9,
+      });
+    }
+
+    loadRecentActivities();
+  };
+
+  const handleRecognizedFaceBatchRef = useRef(handleRecognizedFaceBatch);
+
+  useEffect(() => {
+    handleRecognizedFaceBatchRef.current = handleRecognizedFaceBatch;
+  });
 
   useEffect(() => {
     loadUserData();
@@ -821,6 +1062,12 @@ export default function PatientDashboardScreen({ navigation }: Props) {
 
     try {
       const response = await ApiService.sendVideoForStepVerification(videoUri);
+      const recognizedFaces = extractFaceBatchFromResponse(response);
+
+      if (recognizedFaces.length > 0) {
+        await handleRecognizedFaceBatch(recognizedFaces);
+      }
+
       const message =
         response?.reminder ||
         response?.message ||
@@ -1000,6 +1247,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ Poll for face recognitions with local face matching
   useEffect(() => {
     const interval = setInterval(async () => {
+      if (isPollingFaceRecognitionRef.current) return;
+
+      isPollingFaceRecognitionRef.current = true;
+
       try {
         const res = await axios.get(
           ApiService.getApiEndpoint("/get_face_recognitions"),
@@ -1010,79 +1261,17 @@ export default function PatientDashboardScreen({ navigation }: Props) {
         const faces: FaceRecognitionData[] = res.data.faces || [];
 
         if (faces.length > 0) {
-          for (const faceData of faces) {
-            // ✅ Check cooldown - don't show popup if shown within last hour
-            const cooldownKey = `face_shown_${faceData.name.toLowerCase().trim()}`;
-            const lastShownTime = await AsyncStorage.getItem(cooldownKey);
-
-            if (lastShownTime) {
-              const timeSinceShown = Date.now() - parseInt(lastShownTime, 10);
-              const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
-
-              if (timeSinceShown < oneHourInMs) {
-                console.log(
-                  `⏭️ Skipping ${faceData.name} - shown ${Math.round(timeSinceShown / 60000)} minutes ago`,
-                );
-                continue; // Skip this person
-              }
-            }
-
-            // Find matching local face
-            const localFace = localFaces.find(
-              (f) =>
-                f.name.toLowerCase().trim() ===
-                faceData.name.toLowerCase().trim(),
-            );
-
-            // ✅ Set cooldown timestamp BEFORE showing popup
-            await AsyncStorage.setItem(cooldownKey, Date.now().toString());
-
-            // Show popup
-            if (localFace) {
-              showFaceRecognitionPopup({
-                ...localFace,
-                confidence: faceData.confidence,
-              });
-
-              if (voiceAlertsEnabled) {
-                const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
-                Speech.speak(message, {
-                  language: "en-US",
-                  pitch: 1.0,
-                  rate: 0.9,
-                });
-              }
-            } else {
-              showFaceRecognitionPopup({
-                id: Date.now().toString(),
-                name: faceData.name,
-                relationship: faceData.relationship,
-                imageUri: "",
-                dateAdded: new Date().toISOString(),
-                confidence: faceData.confidence,
-              });
-
-              if (voiceAlertsEnabled) {
-                const message = `Hello! ${faceData.name}, your ${faceData.relationship}, is here.`;
-                Speech.speak(message, {
-                  language: "en-US",
-                  pitch: 1.0,
-                  rate: 0.9,
-                });
-              }
-            }
-
-            // ✅ Refresh activities after face recognition
-            loadRecentActivities();
-          }
+          await handleRecognizedFaceBatchRef.current(faces);
         }
       } catch (err) {
         console.log("Error fetching face recognitions:", err);
+      } finally {
+        isPollingFaceRecognitionRef.current = false;
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [voiceAlertsEnabled, localFaces]);
+  }, []);
 
   if (!fontsLoaded)
     return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
@@ -1344,13 +1533,23 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   // ✅ Face Recognition Popup Component
   const FaceRecognitionPopup: React.FC<{
     visible: boolean;
-    face: (RecognizedFace & { confidence?: number }) | null;
+    faces: FacePopupItem[];
     onClose: () => void;
-  }> = ({ visible, face, onClose }) => {
-    if (!visible || !face) return null;
+  }> = ({ visible, faces, onClose }) => {
+    if (!visible || faces.length === 0) return null;
+
+    const multipleFaces = faces.length > 1;
+    const title = multipleFaces
+      ? `${faces.length} familiar people are here`
+      : "You know this person!";
 
     return (
-      <Modal visible={visible} transparent animationType="none">
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        onRequestClose={onClose}
+      >
         <View style={faceStyles.overlay}>
           <BlurView
             intensity={40}
@@ -1373,33 +1572,55 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               end={{ x: 1, y: 1 }}
               style={faceStyles.popup}
             >
-              {/* Face Image */}
-              {face.imageUri ? (
-                <Image
-                  source={{ uri: face.imageUri }}
-                  style={faceStyles.faceImage}
+              <View style={faceStyles.iconBadge}>
+                <MaterialIcons
+                  name={multipleFaces ? "groups" : "person"}
+                  size={36}
+                  color={C.emerald500}
                 />
-              ) : (
-                <View style={faceStyles.faceImagePlaceholder}>
-                  <MaterialIcons name="person" size={64} color="#fff" />
-                </View>
-              )}
+              </View>
 
-              {/* Text Content */}
-              <Text style={faceStyles.subtitle}>You know this person!</Text>
-              <Text style={faceStyles.name}>{face.name}</Text>
-              <Text style={faceStyles.relationship}>
-                Your {face.relationship}
+              <Text style={faceStyles.subtitle}>{title}</Text>
+              <Text style={faceStyles.summary}>
+                {faces.map((face) => face.name).join(", ")}
               </Text>
 
-              {/* Optional: Show confidence */}
-              {face.confidence && (
-                <Text style={faceStyles.confidence}>
-                  {Math.round(face.confidence)}% match
-                </Text>
-              )}
+              <ScrollView
+                style={faceStyles.faceList}
+                contentContainerStyle={faceStyles.faceListContent}
+                showsVerticalScrollIndicator={faces.length > 3}
+              >
+                {faces.map((face) => (
+                  <View key={getFaceIdentityKey(face)} style={faceStyles.faceRow}>
+                    {face.imageUri ? (
+                      <Image
+                        source={{ uri: face.imageUri }}
+                        style={faceStyles.faceThumb}
+                      />
+                    ) : (
+                      <View style={faceStyles.faceThumbPlaceholder}>
+                        <MaterialIcons name="person" size={30} color="#fff" />
+                      </View>
+                    )}
 
-              {/* Dismiss Button */}
+                    <View style={faceStyles.faceInfo}>
+                      <Text style={faceStyles.name} numberOfLines={1}>
+                        {face.name}
+                      </Text>
+                      <Text style={faceStyles.relationship} numberOfLines={1}>
+                        Your {face.relationship}
+                      </Text>
+                    </View>
+
+                    {typeof face.confidence === "number" && (
+                      <Text style={faceStyles.confidence}>
+                        {Math.round(face.confidence)}%
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+
               <TouchableOpacity
                 style={faceStyles.dismissButton}
                 activeOpacity={0.9}
@@ -1996,7 +2217,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                       size={22}
                       color="#e11d48"
                     />
-                    <Text style={fallStyles.primaryText}>I'm OK</Text>
+                    <Text style={fallStyles.primaryText}>I am OK</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -2016,7 +2237,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       {/* Face Recognition Popup */}
       <FaceRecognitionPopup
         visible={showFacePopup}
-        face={recognizedFace}
+        faces={recognizedFaceBatch}
         onClose={hideFaceRecognitionPopup}
       />
 
@@ -2099,6 +2320,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                   isRecording && notesStyles.micBtnActive,
                 ]}
                 onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+                disabled={isTranscribingNote}
                 activeOpacity={0.8}
               >
                 <MaterialIcons
@@ -2132,11 +2354,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            {isRecording && (
+            {(isRecording || isTranscribingNote) && (
               <View style={notesStyles.recordingBanner}>
                 <View style={notesStyles.recordingDot} />
                 <Text style={notesStyles.recordingText}>
-                  Recording… text appears every few seconds
+                  {isRecording ? "Recording..." : "Transcribing..."}
                 </Text>
               </View>
             )}
@@ -3066,8 +3288,8 @@ const faceStyles = StyleSheet.create({
     maxWidth: 380,
   },
   popup: {
-    borderRadius: 28,
-    padding: 32,
+    borderRadius: 24,
+    padding: 24,
     alignItems: "center",
     shadowColor: "#34d399",
     shadowOpacity: 0.4,
@@ -3075,52 +3297,89 @@ const faceStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 8,
   },
-  faceImage: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.5)",
-    marginBottom: 20,
-  },
-  faceImagePlaceholder: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.5)",
-    marginBottom: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
+  iconBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 16,
   },
   subtitle: {
-    fontFamily: "Poppins_400Regular",
-    fontSize: 16,
-    color: "#fff",
-    opacity: 0.8,
-    marginBottom: 4,
-  },
-  name: {
     fontFamily: "Poppins_700Bold",
-    fontSize: 36,
+    fontSize: 22,
     color: "#fff",
     marginBottom: 8,
     textAlign: "center",
   },
+  summary: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 15,
+    color: "#fff",
+    opacity: 0.85,
+    marginBottom: 18,
+    textAlign: "center",
+  },
+  faceList: {
+    width: "100%",
+    maxHeight: 300,
+    marginBottom: 18,
+  },
+  faceListContent: {
+    gap: 10,
+  },
+  faceRow: {
+    width: "100%",
+    minHeight: 76,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  faceThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  faceThumbPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  faceInfo: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+  },
+  name: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 18,
+    color: "#fff",
+  },
   relationship: {
     fontFamily: "Poppins_500Medium",
-    fontSize: 20,
+    fontSize: 13,
     color: "#fff",
-    opacity: 0.9,
-    marginBottom: 16,
+    opacity: 0.82,
+    marginTop: 2,
   },
   confidence: {
-    fontFamily: "Poppins_400Regular",
+    fontFamily: "Poppins_700Bold",
     fontSize: 14,
     color: "#fff",
-    opacity: 0.7,
-    marginBottom: 16,
+    marginLeft: 10,
   },
   dismissButton: {
     width: "100%",
