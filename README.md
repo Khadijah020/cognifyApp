@@ -7,9 +7,9 @@ The project is implemented with Expo, React Native, TypeScript, React Navigation
 <p align="center">
   <img src="screenshots/dashboard.png" width="250">
   <img src="screenshots/reminder.png" width="250">
-  <img src="screenshots/contextual-reminder.png" width="250">
-  <img src="screenshots/task-guidance.png" width="250">
-  <img src="screenshots/simple-reminder.png" width="250">
+  <img src="screenshots/Contextual-reminder.png" width="250">
+  <img src="screenshots/Task-guidance.png" width="250">
+  <img src="screenshots/Simple-reminder.png" width="250">
 
 </p>
 
