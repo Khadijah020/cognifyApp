@@ -4,6 +4,15 @@ Cognify is a cross-platform mobile application built for a Final Year Project (F
 
 The project is implemented with Expo, React Native, TypeScript, React Navigation, Supabase, and a configurable external AI/computer-vision backend exposed through an ngrok URL.
 
+<p align="center">
+  <img src="screenshots/dashboard.png" width="250">
+  <img src="screenshots/reminder.png" width="250">
+  <img src="screenshots/contextual-reminder.png" width="250">
+  <img src="screenshots/task-guidance.png" width="250">
+  <img src="screenshots/simple-reminder.png" width="250">
+
+</p>
+
 ## Table of Contents
 
 - [Features](#features)
@@ -86,19 +95,19 @@ The project is implemented with Expo, React Native, TypeScript, React Navigation
 
 ## Tech Stack
 
-| Area | Technology |
-| --- | --- |
-| Mobile framework | Expo SDK 54, React Native 0.81 |
-| Language | TypeScript |
-| UI/runtime | React 19, Expo modules |
-| Navigation | React Navigation native stack |
-| Backend-as-a-Service | Supabase Auth, Database, Storage, Realtime, Edge Functions |
-| Local storage | AsyncStorage |
-| Device APIs | Expo Notifications, Location, Sensors, Battery, Image Picker, AV, Speech |
-| Maps | react-native-maps |
-| HTTP | fetch, Axios |
-| Fonts | Poppins, Space Grotesk |
-| CI | GitHub Actions |
+| Area                 | Technology                                                               |
+| -------------------- | ------------------------------------------------------------------------ |
+| Mobile framework     | Expo SDK 54, React Native 0.81                                           |
+| Language             | TypeScript                                                               |
+| UI/runtime           | React 19, Expo modules                                                   |
+| Navigation           | React Navigation native stack                                            |
+| Backend-as-a-Service | Supabase Auth, Database, Storage, Realtime, Edge Functions               |
+| Local storage        | AsyncStorage                                                             |
+| Device APIs          | Expo Notifications, Location, Sensors, Battery, Image Picker, AV, Speech |
+| Maps                 | react-native-maps                                                        |
+| HTTP                 | fetch, Axios                                                             |
+| Fonts                | Poppins, Space Grotesk                                                   |
+| CI                   | GitHub Actions                                                           |
 
 ## Architecture
 
@@ -282,34 +291,34 @@ Never expose the service-role key in the mobile client.
 
 The app expects the external backend to provide these endpoints:
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | Backend connectivity check |
-| `POST /register_patient` | Patient registration flow used by the app |
-| `POST /register_face` | Register a known face/person |
-| `DELETE /delete_face/:id` | Delete a registered face |
-| `GET /get_face_recognitions` | Poll recognized faces |
-| `POST /transcribe_note` | Speech-to-text for patient notes |
-| `GET /get_reminders` | Contextual reminder polling |
-| `POST /task_guidance` | Start voice-guided task assistance |
-| `GET /task_guidance/active_session` | Retrieve active task session |
-| `GET /task_guidance/step_updates` | Poll next-step/task completion updates |
-| `POST /task_guidance/cancel_session` | Cancel active task guidance |
-| `POST /process_video` | Upload video for task verification/fall processing |
-| `GET /get_fall_detections?clear=false` | Poll backend-detected falls |
-| `POST /fall_sensor_candidate` | Submit sensor fall candidate data |
+| Endpoint                               | Purpose                                            |
+| -------------------------------------- | -------------------------------------------------- |
+| `GET /health`                          | Backend connectivity check                         |
+| `POST /register_patient`               | Patient registration flow used by the app          |
+| `POST /register_face`                  | Register a known face/person                       |
+| `DELETE /delete_face/:id`              | Delete a registered face                           |
+| `GET /get_face_recognitions`           | Poll recognized faces                              |
+| `POST /transcribe_note`                | Speech-to-text for patient notes                   |
+| `GET /get_reminders`                   | Contextual reminder polling                        |
+| `POST /task_guidance`                  | Start voice-guided task assistance                 |
+| `GET /task_guidance/active_session`    | Retrieve active task session                       |
+| `GET /task_guidance/step_updates`      | Poll next-step/task completion updates             |
+| `POST /task_guidance/cancel_session`   | Cancel active task guidance                        |
+| `POST /process_video`                  | Upload video for task verification/fall processing |
+| `GET /get_fall_detections?clear=false` | Poll backend-detected falls                        |
+| `POST /fall_sensor_candidate`          | Submit sensor fall candidate data                  |
 
 For local development, expose the backend through ngrok and update the URL in the app's API Configuration screen.
 
 ## Available Scripts
 
-| Command | Description |
-| --- | --- |
-| `npm start` | Start Expo development server |
-| `npm run android` | Start Expo and open Android target |
-| `npm run ios` | Start Expo and open iOS target |
-| `npm run web` | Start Expo web target |
-| `npm run lint` | Run Expo ESLint |
+| Command                 | Description                         |
+| ----------------------- | ----------------------------------- |
+| `npm start`             | Start Expo development server       |
+| `npm run android`       | Start Expo and open Android target  |
+| `npm run ios`           | Start Expo and open iOS target      |
+| `npm run web`           | Start Expo web target               |
+| `npm run lint`          | Run Expo ESLint                     |
 | `npm run reset-project` | Run the project reset helper script |
 
 There is currently no automated test script configured.

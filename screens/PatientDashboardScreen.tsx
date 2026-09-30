@@ -158,8 +158,10 @@ const FACE_RECOGNITION_COOLDOWN_MS = 60 * 60 * 1000;
 const normalizeFaceText = (value?: string | null) =>
   (value || "").trim().toLowerCase();
 
-const getFaceIdentityKey = (face: { id?: string | null; name?: string | null }) =>
-  normalizeFaceText(face.id) || normalizeFaceText(face.name);
+const getFaceIdentityKey = (face: {
+  id?: string | null;
+  name?: string | null;
+}) => normalizeFaceText(face.id) || normalizeFaceText(face.name);
 
 const mergeFacePopupItems = (
   currentFaces: FacePopupItem[],
@@ -195,6 +197,7 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string>("Patient");
   const [caregiverId, setCaregiverId] = useState<string | null>(null);
+  const [caregiverPhone, setCaregiverPhone] = useState<string | null>(null);
   const [upcomingReminders, setUpcomingReminders] = useState<ReminderData[]>(
     [],
   );
@@ -683,7 +686,9 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     });
   };
 
-  const extractFaceBatchFromResponse = (response: any): FaceRecognitionData[] => {
+  const extractFaceBatchFromResponse = (
+    response: any,
+  ): FaceRecognitionData[] => {
     const candidateLists = [
       response?.faces,
       response?.recognized_faces,
@@ -726,8 +731,11 @@ export default function PatientDashboardScreen({ navigation }: Props) {
       if (!name) continue;
 
       const backendId = faceData.id || match?.id || undefined;
-      const relationship =
-        (faceData.relationship || match?.relationship || "known person").trim();
+      const relationship = (
+        faceData.relationship ||
+        match?.relationship ||
+        "known person"
+      ).trim();
       const identityKey = getFaceIdentityKey({ id: backendId, name });
 
       if (!identityKey || seenInBatch.has(identityKey)) continue;
@@ -791,6 +799,34 @@ export default function PatientDashboardScreen({ navigation }: Props) {
   useEffect(() => {
     loadUserData();
   }, []);
+
+  useEffect(() => {
+    const loadCaregiverPhone = async () => {
+      if (!caregiverId) {
+        setCaregiverPhone(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("caregivers")
+          .select("phone")
+          .eq("id", caregiverId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching caregiver phone:", error);
+          return;
+        }
+
+        setCaregiverPhone(data?.phone || null);
+      } catch (err) {
+        console.error("Unexpected error loading caregiver phone:", err);
+      }
+    };
+
+    loadCaregiverPhone();
+  }, [caregiverId]);
 
   const loadUserData = async () => {
     try {
@@ -1277,11 +1313,21 @@ export default function PatientDashboardScreen({ navigation }: Props) {
     return <View style={{ flex: 1, backgroundColor: C.bgTo }} />;
 
   const callCaregiver = async () => {
-    const phone = "+11234567890";
-    const url = `tel:${phone}`;
+    if (!caregiverPhone) {
+      Alert.alert(
+        "Phone number unavailable",
+        "Unable to find your caregiver's phone number. Please try again later.",
+      );
+      return;
+    }
+
+    const url = `tel:${caregiverPhone}`;
     const supported = await Linking.canOpenURL(url);
-    if (!supported) Alert.alert("Call not available on this device");
-    else Linking.openURL(url);
+    if (!supported) {
+      Alert.alert("Call not available on this device");
+    } else {
+      Linking.openURL(url);
+    }
   };
 
   const MedicationReminderPopup: React.FC<{
@@ -1591,7 +1637,10 @@ export default function PatientDashboardScreen({ navigation }: Props) {
                 showsVerticalScrollIndicator={faces.length > 3}
               >
                 {faces.map((face) => (
-                  <View key={getFaceIdentityKey(face)} style={faceStyles.faceRow}>
+                  <View
+                    key={getFaceIdentityKey(face)}
+                    style={faceStyles.faceRow}
+                  >
                     {face.imageUri ? (
                       <Image
                         source={{ uri: face.imageUri }}
